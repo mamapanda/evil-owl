@@ -46,7 +46,7 @@
   `(("Named"     . ,(cl-loop for c from ?a to ?z collect c))
     ("Numbered"  . ,(cl-loop for c from ?0 to ?9 collect c))
     ("Special"   . (?\" ?* ?+ ?-))
-    ("Read-only" . (?. ?% ?# ?/ ?:)))
+    ("Read-only" . (?% ?# ?/ ?: ?.)))
   "An alist of register group names to registers.
 Groups and registers will be displayed in the same order they appear
 in this variable."
@@ -69,6 +69,10 @@ and another for the contents."
 (defcustom evil-blink-extra-posframe-args nil
   "Extra arguments to pass to `posframe-show'."
   :type 'list)
+
+(defcustom evil-blink-register-char-limit nil
+  "Maximum number of characters to consider in a string register."
+  :type 'integer)
 
 ;; ** Faces
 (defface evil-blink-group-name nil
@@ -105,6 +109,9 @@ and another for the contents."
   (when-let ((contents (evil-get-register reg t)))
     (cond
      ((stringp contents)
+      (when (and evil-blink-register-char-limit
+                 (> (length contents) evil-blink-register-char-limit))
+        (setq contents (substring contents 0 evil-blink-register-char-limit)))
       (replace-regexp-in-string "\n" "^J" contents))
      ((vectorp contents)
       (key-description contents)))))
@@ -168,6 +175,7 @@ and another for the contents."
    '(evil-blink-entry-name ((t (:inherit font-lock-function-name-face :weight bold)))))
   (set-face-background 'internal-border
                        (face-foreground 'font-lock-comment-face))
+  (gsetq evil-blink-register-char-limit 100)
   (gsetq evil-blink-extra-posframe-args
          `(
            ;; NOTE: looks like :background-color only enables the
@@ -192,22 +200,18 @@ and another for the contents."
 (general-def 'insert
   "C-r" 'evil-blink-paste-from-register)
 
-;; NOTE: if we have to provide a general limiter, we could just use a defalias
-(defcustom evil-blink-register-char-limit nil
-  "Maximum number of characters to consider in a string register."
-  :type 'integer)
-
-(defun evil-blink--get-register (reg)
-  "Get the contents of REG as a string."
-  (when-let ((contents (evil-get-register reg t)))
-    (cond
-     ((stringp contents)
-      (when (and evil-blink-register-char-limit
-                 (> (length contents) evil-blink-register-char-limit))
-        (setq contents (substring contents 0 evil-blink-register-char-limit)))
-      (replace-regexp-in-string "\n" "^J" contents))
-     ((vectorp contents)
-      (key-description contents)))))
+;; (setq evil-blink-register-group-alist (assoc-delete-all "Named" evil-blink-register-group-alist))
+;; NOTE: setting the register limit to 100 makes the execution almost instant
+;; (gsetq evil-blink-register-char-limit 100)
+;; (gsetq evil-blink-register-char-limit 50)
+;; even with yanking yasnippet.el 9 times
+;; NOTE: should put in readme that I recommend to set the limit to one
+;; past the width of the :height posframe parameter, if supplied.
+(general-def 'normal
+  "SPC SPC" (lambda ()
+              (interactive)
+              (message "%S"
+                       (evil-blink--registers-string))))
 
 (unless t
   (progn
@@ -226,13 +230,6 @@ and another for the contents."
                      ))
     )
   )
-
-;; NOTE: seems like this works for setting the borders of posframes
-;; we could prob set it to the blue keyword color for our own private config
-(panda-with-gui
-  (set-face-attribute 'internal-border nil
-                      :background (face-attribute
-                                   'font-lock-keyword-face :foreground nil t)))
 
 ;; independent format string arg order
 (progn
