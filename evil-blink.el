@@ -70,6 +70,10 @@ and another for the contents."
   "Extra arguments to pass to `posframe-show'."
   :type 'list)
 
+(defcustom evil-blink-idle-delay 1
+  "The idle delay, in seconds, before the popup appears."
+  :type 'float)
+
 (defcustom evil-blink-register-char-limit nil
   "Maximum number of characters to consider in a string register."
   :type 'integer)
@@ -125,6 +129,9 @@ and another for the contents."
 (defconst evil-blink--buffer " *evil-blink*"
   "The buffer name for the posframe.")
 
+(defvar evil-blink--timer nil
+  "The timer for the posframe.")
+
 (defun evil-blink--show (string)
   (when (posframe-workable-p)
     (apply #'posframe-show
@@ -136,18 +143,25 @@ and another for the contents."
     (posframe-funcall evil-blink--buffer
                       (lambda () (setq-local truncate-lines t)))))
 
+(defun evil-blink--idle-show (string)
+  (setq evil-blink--timer
+        (run-at-time evil-blink-idle-delay nil #'evil-blink--show string)))
+
 (defun evil-blink--hide ()
+  (when evil-blink--timer
+    (cancel-timer evil-blink--timer)
+    (setq evil-blink--timer nil))
   (posframe-delete evil-blink--buffer))
 
-;; * Wrapper Functions
-;; TODO: Can we come up with a smarter/cleaner way to do this?
+;; * Minor Mode
+;; TODO: Maybe keyword args just to be more readable (:wrap :display)
 (defmacro evil-blink--define-wrapper (name wrapped-fn string-fn)
   `(defun ,name ()
      (interactive)
      (setq this-command #',wrapped-fn)
      (unwind-protect
          (progn
-           (evil-blink--show (,string-fn))
+           (evil-blink--idle-show (,string-fn))
            (call-interactively #',wrapped-fn))
        (evil-blink--hide))))
 
