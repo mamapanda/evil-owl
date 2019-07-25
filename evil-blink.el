@@ -78,6 +78,10 @@ and another for the contents."
   "Maximum number of characters to consider in a string register."
   :type 'integer)
 
+(defcustom evil-blink-lighter " blink"
+  "Lighter for `evil-blink-mode'."
+  :type 'string)
+
 ;; ** Faces
 (defface evil-blink-group-name nil
   "The face for group names.")
@@ -181,6 +185,20 @@ and another for the contents."
                             evil-paste-from-register
                             evil-blink--registers-string)
 
+(define-minor-mode evil-blink-mode
+  "A minor mode to preview marks and registers before using them."
+  :global t
+  :lighter evil-blink-lighter
+  :keymap (let ((map (make-sparse-keymap)))
+            (evil-define-key*
+             'normal map
+             [remap evil-record-macro] #'evil-blink-record-macro
+             [remap evil-execute-macro] #'evil-blink-execute-macro
+             [remap evil-use-register] #'evil-blink-use-register)
+            (evil-define-key*
+             'insert map
+             [remap evil-paste-from-register] #'evil-blink-paste-from-register)
+            map))
 
 ;; * scratch
 (progn ; test customizations
