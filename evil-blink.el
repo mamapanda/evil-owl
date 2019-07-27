@@ -203,8 +203,24 @@ and another for the contents."
 ;; TODO: when register contents is "scroll", there's an error with @
 ;;       >> execute macro was passing args?
 ;; TODO: "scroll" failed because `evil-snipe-def' uses `evil-read-key'
+;;        this means we can't use `cl-letf', since other commands
+;;        might use `evil-read-key' and `read-char' when using `evil-execute-macro'
 ;; TODO: verify that our thing works with macros
 ;;       hint: it doesn't
+;; NOTE: a possible solution is to obtain the interactive form of the
+;;       evil commands and execute just those with `cl-letf'
+;;          - but is it possible to obtain an interactive form?
+;;       --> `interactive-form'?
+;; (interactive-form #'evil-execute-macro)
+;; (interactive-form #'evil-backward-arg)
+;; TODO: but what it the forms are string codes?
+;;       luckily, the relevant evil functions don't use built-in string codes, so we're fine
+;; NOTE: could we just grab the interactive form and paste it as the
+;; wrapper's interactive form, then somehow use `cl-letf' or something
+;; to replace `read-char' and `evil-read-key' calls?
+;;        we could inject a `cl-letf' in the form?
+;; (advice-eval-interactive-spec (cl-second (interactive-form #'evil-backward-arg)))
+;; TODO: check if this conflicts with macros
 (defun evil-blink--read-register-or-mark (&rest _)
   "Read a register or mark character.
 This function allows executing commands in `evil-blink-popup-map', and
@@ -228,16 +244,24 @@ the keys of such commands will not be read."
 ;; * Minor Mode
 ;; TODO: Maybe keyword args just to be more readable (:wrap :display)
 (defmacro evil-blink--define-wrapper (name wrapped-fn string-fn)
+  ;; TODO: use `evil-define-command' and copy with evil's command properties
+  ;;       - `evil-get-command-properties' `evil-add-command-properties'
+  (cl-assert (symbolp name))
+  (cl-assert (commandp wrapped-fn))
+  (cl-assert (functionp string-fn))
   `(defun ,name ()
+     ,(format "Wrapper function for `%s' that shows a posframe preview." wrapped-fn)
      (interactive)
      (setq this-command #',wrapped-fn)
-     (unwind-protect
-         (progn
-           (evil-blink--idle-show (,string-fn))
-           (cl-letf (((symbol-function 'evil-read-key) #'evil-blink--read-register-or-mark)
-                     ((symbol-function 'read-char) #'evil-blink--read-register-or-mark))
-             (call-interactively #',wrapped-fn)))
-       (evil-blink--hide))))
+     (apply
+      #',wrapped-fn
+      (unwind-protect
+          (progn
+            (evil-blink--idle-show (,string-fn))
+            (cl-letf (((symbol-function 'evil-read-key) #'evil-blink--read-register-or-mark)
+                      ((symbol-function 'read-char) #'evil-blink--read-register-or-mark))
+              (advice-eval-interactive-spec (cl-second (interactive-form #',wrapped-fn)))))
+        (evil-blink--hide)))))
 
 (evil-blink--define-wrapper evil-blink-use-register
                             evil-use-register
