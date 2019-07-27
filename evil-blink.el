@@ -32,6 +32,7 @@
 ;;; Code:
 
 ;; * Setup
+(require 'cl-lib)
 (require 'evil)
 (require 'posframe)
 
@@ -106,6 +107,8 @@ and another for the contents."
     (concat header body evil-blink-separator)))
 
 (defun evil-blink--display-string (group-alist describe-fn)
+  ;; TODO: this could probably be a lot cleaner with `mapconcat'
+  ;; instead of using `string-remove-suffix'
   (string-remove-suffix
    evil-blink-separator
    (cl-loop for (group . entry-names) in group-alist
@@ -130,11 +133,12 @@ and another for the contents."
                               #'evil-blink--get-register))
 
 ;; * Posframe
+;; ** Show / Hide
 (defconst evil-blink--buffer " *evil-blink*"
-  "The buffer name for the posframe.")
+  "The buffer name for the popup.")
 
 (defvar evil-blink--timer nil
-  "The timer for the posframe.")
+  "The timer for the popup.")
 
 (defun evil-blink--show (string)
   (when (posframe-workable-p)
@@ -157,6 +161,70 @@ and another for the contents."
     (setq evil-blink--timer nil))
   (posframe-delete evil-blink--buffer))
 
+;; ** Keybindings
+(defvar evil-blink-popup-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "<escape>") #'keyboard-quit)
+    (define-key map (kbd "C-g") #'keyboard-quit)
+    ;; TODO: these should be wrapped with `posframe-funcall' and `condition-case'
+    (define-key map (kbd "C-b") #'evil-blink-scroll-popup-up)
+    (define-key map (kbd "C-f") #'evil-blink-scroll-popup-down)
+    map)
+  "Keymap applied when the popup is active.")
+
+(defun evil-blink-scroll-popup-up ()
+  "Scroll the popup up one page."
+  (interactive)
+  (condition-case nil
+      (posframe-funcall evil-blink--buffer #'scroll-down)
+    (beginning-of-buffer nil)))
+
+(defun evil-blink-scroll-popup-down ()
+  "Scroll the popup down one page."
+  (interactive)
+  (condition-case nil
+      (posframe-funcall evil-blink--buffer #'scroll-up)
+    (end-of-buffer nil)))
+
+(defmacro evil-blink--with-popup-map (&rest body)
+  "Execute BODY with `evil-blink-popup-map' as the sole keymap."
+  (declare (indent 0))
+  (let ((current-global-map (gensym "current-global-map")))
+    `(let ((overriding-terminal-local-map nil)
+           (overriding-local-map evil-blink-popup-map)
+           (,current-global-map (current-global-map)))
+       (unwind-protect
+           (progn
+             (use-global-map (make-sparse-keymap))
+             ,@body)
+         (use-global-map ,current-global-map)))))
+
+;; TODO: probably reorganize this
+;; TODO: when register contents is "scroll", there's an error with @
+;;       >> execute macro was passing args?
+;; TODO: "scroll" failed because `evil-snipe-def' uses `evil-read-key'
+;; TODO: verify that our thing works with macros
+;;       hint: it doesn't
+(defun evil-blink--read-register-or-mark (&rest _)
+  "Read a register or mark character.
+This function allows executing commands in `evil-blink-popup-map', and
+the keys of such commands will not be read."
+  (evil-blink--with-popup-map
+    (catch 'char
+      (while t
+        (let* ((keys (read-key-sequence nil t))
+               (cmd (key-binding keys)))
+          (cond
+           (cmd
+            (call-interactively cmd))
+           ((and (stringp keys) (= (length keys) 1))
+            (throw 'char (aref keys 0)))
+           (t
+            ;; Keys that are represented with vectors and not
+            ;; strings (e.g. delete and f3) are not valid registers
+            ;; or marks.
+            (user-error "%s is undefined" (key-description keys)))))))))
+
 ;; * Minor Mode
 ;; TODO: Maybe keyword args just to be more readable (:wrap :display)
 (defmacro evil-blink--define-wrapper (name wrapped-fn string-fn)
@@ -166,7 +234,9 @@ and another for the contents."
      (unwind-protect
          (progn
            (evil-blink--idle-show (,string-fn))
-           (call-interactively #',wrapped-fn))
+           (cl-letf (((symbol-function 'evil-read-key) #'evil-blink--read-register-or-mark)
+                     ((symbol-function 'read-char) #'evil-blink--read-register-or-mark))
+             (call-interactively #',wrapped-fn)))
        (evil-blink--hide))))
 
 (evil-blink--define-wrapper evil-blink-use-register
@@ -201,49 +271,243 @@ and another for the contents."
             map))
 
 ;; * scratch
+(unless t                               ; NOTE: current attempt
+
+  ;; for testing if longer keys work
+  (general-def evil-blink-popup-map "C-x x x" (lambda () (interactive) (message "hi")))
+  (general-def evil-blink-popup-map "<f3>" (lambda () (interactive) (message "f3")))
+
+  ;; could this be helpful?
+  (lookup-key function-key-map (kbd "<return>"))
+  (lookup-key function-key-map (kbd "<backspace>"))
+  (lookup-key function-key-map (kbd "<delete>")) ;; => [127]
+  (lookup-key local-function-key-map (kbd "<return>"))
+  (lookup-key local-function-key-map (kbd "<delete>")) ;; => [deletechar]
+  (lookup-key local-function-key-map (kbd "<deletechar>")) ;; => nil
+  (lookup-key local-function-key-map (kbd "<backspace>"))
+
+
+  ;; NOTE: despite its name, `evil-read-key' actually returns a character
+  ;;       it's main advantage over `read-char' is that it implements a custom keymap,
+  ;;       which we don't really need for marks and registers.
+  ;; so it looks like the below isn't actually needed
+
+  ;; TODO: do we have to write a replacement for `evil-read-key'?
+  ;;       can't we just reuse `evil-blink--read-register-or-mark'?
+  ;; `evil-read-key' should just return a character for valid register and mark values anyways.
+  (defun evil-blink--read-key-advice (_)
+    "Advice for scroll commands to be compatible with `evil-read-key'."
+    ;; `evil-read-key' expects all commands in `evil-read-key-map' to
+    ;; return keys. Things work out if we recursively call
+    ;; `evil-read-key'.
+    (evil-read-key))
+
+  ;; TODO: it might be less risky to read the key and then pass it to evil's functions
+  ;;       so they aren't interactively called
+  ;;       but this is kind of stupid, since some of them implement custom interactive logic
+  ;;       that i'd like to replicate.
+  ;;       - Also, they each only call `evil-read-key' or `read-char' only once anyways, so
+  ;;         there's little chance of conflict.
+  (defun evil-blink--read-key ()
+    "A drop-in for `evil-read-key' that enables `evil-blink-popup-map'."
+    ;; TODO: the blink commands must return keys.
+    (let ((evil-read-key-map (copy-keymap evil-read-key-map))))
+    ;; TODO: this doesn't iterate through all bindings
+    (let (a)
+      (map-keymap (lambda (key def) (push key a)) yas-minor-mode-map)
+      a)
+    ))
+
+;; (unless t
+;;   (defvar evil-blink-popup-map
+;;     (let ((map (make-sparse-keymap)))
+;;       (define-key map (kbd "C-b") #'evil-scroll-up)
+;;       (define-key map (kbd "C-f") #'evil-scroll-down)
+;;       map)
+;;     "Keymap applied when the popup is active.")
+;;   (defun evil-blink--use-popup-map ()
+;;     "Execute key sequences in `evil-blink-popup-map'.
+;; This function terminates when a key is not in the map, pushing said
+;; key into `unread-command-events'."
+;;     (let ((overriding-terminal-local-map nil)
+;;           (overriding-local-map evil-blink-popup-map)
+;;           (current-global-map (current-global-map))
+;;           keys
+;;           cmd)
+;;       (unwind-protect
+;;           (progn ; TODO: is there a less hacky way to do this?
+;;             (use-global-map (make-sparse-keymap))
+;;             (setq keys (read-key-sequence nil nil t))
+;;             (while (setq cmd (key-binding keys))
+;;               (call-interactively cmd)
+;;               (setq keys (read-key-sequence nil nil t)))
+;;             (setq unread-command-events
+;;                   (nconc (listify-key-sequence keys) unread-command-events)))
+;;         (use-global-map current-global-map))))
+
+;;   ;; NOTE: `read-key-sequence' always returns the string form?
+;;   ;;      actually, we can just use the same trick as evil maybe
+
+;;   ;; TODO: if we give up, we can do the same thing as before, with the
+;;   ;; hacked `evil-read-key-map', and we can also have our own custom `read-char' function.
+;;   ;; - the above can be modified to be the new `read-char' function
+;;   ;; - we'd have two functions to `cl-letf' in that case
+;;   ;;   but `cl-letf'ing `read-char' seems like such an unnecessary hack though
+;;   ;;   - NOTE BUT our argument could be that we're "advising" the input functions
+;;   ;;          to allowing scrolling before the input is actually read
+;;   ;; - let's take advantage of the fact that the relevant evil functions show no prompt
+;;   (advice-add #'read-char :after (lambda (&rest _) (message "hi") (sleep-for 1)))
+;;   (read-char)
+
+;;   ;; TODO: then we need to use `discard-input' to clear unknown keys maybe?
+;;   ;;       - If the key sequence is longer than 1 key, there's no
+;;   ;;         guarantee that evil will expect only one key. For
+;;   ;;         example, the user might bind a multi-sequence key in
+;;   ;;         `evil-read-key-map'.
+;;   ;;         - so we should probably clear it AFTER evil's functions execute
+;;   ;;           - none of the relevant evil functions will leave unread keys lying around
+
+;;   ;; TODO: do we need to add this into the function?
+;;   ;; (mapc 'store-kbd-macro-event char-or-events)
+;;   ;; see `isearch-unread'
+
+;;   (defun test ()
+;;     (evil-blink--use-popup-map)
+;;     ;; TODO: seems like it works as long as it's in the same function call?
+;;     ;;       but an extra "l" is added to the macro. see :reg
+;;     (setq unread-command-events (nconc (listify-key-sequence "l") unread-command-events))
+;;     (insert "%s" (read-char)))
+;;   (test) ; qq SPC ; , e l => the macro does an extra l
+;;   ;;     is it possible that setting unread-command-events adds to the macro?
+;;   ;;          it does add it
+;;   (progn
+;;     (setq unread-command-events (nconc (listify-key-sequence "l") unread-command-events))
+;;     (message "%s" (read-char))
+;;     (setq unread-command-events (nconc (listify-key-sequence "l") unread-command-events))
+;;     (message "%s" (read-char))
+;;     (setq unread-command-events (nconc (listify-key-sequence "l") unread-command-events))
+;;     (message "%s" (read-char))
+;;     (setq unread-command-events (nconc (listify-key-sequence "l") unread-command-events))
+;;     (message "%s" (read-char))
+;;     (setq unread-command-events (nconc (listify-key-sequence "l") unread-command-events))
+;;     (message "%s" (read-char))
+;;     ;; (message "%s" (read-key-sequence ""))
+;;     ;; TODO: see SPC ; , e l on this snippet. it gives a weird error when recording a macro
+;;     ;; instead of messaging, the key is actually executed
+;;     ;;     looks like the (message "%s" (read-char)) is skipped in the macro
+;;     ;; putting an (insert (read-char)) into the defun, it seems that the key will be read in the function
+;;     ;; it seems unread-command-events doesn't work with macros? or at least there's something weird
+;;     ;;    - there might be an extra key being added
+;;     ;; TODO: looks like the unread-command-events are added to the kbd macro
+;;     ;; TODO: do NOT use `discard-input', since it'll cancel any kbd macros being recorded
+;;     ;;       we could (setq unread-command-events old-unread-command-events) or something instead
+;;     )
+;;   )
+
+;; (unless t
+;;   (defvar evil-blink-popup-map
+;;     (let ((map (make-sparse-keymap)))
+;;       (define-key map (kbd "C-b") #'evil-scroll-up)
+;;       (define-key map (kbd "C-f") #'evil-scroll-down)
+;;       map)
+;;     "Keymap applied when the popup is active.")
+;;   ;; We need to be wary of any extra keypresses generated that won't
+;;   ;; be read by evil, such as `evil-execute-macro'.
+;;   (defun evil-blink--use-popup-map ()
+;;     "Execute key sequences in `evil-blink-popup-map'.
+;; This function terminates when a key is not in the map."
+;;     ;; TODO: will this work with `evil-execute-macro'? It uses `read-char'.
+;;     ;;       we might be able to use `discard-input'
+;;     (cl-loop for input = (read-key-sequence "") ;; TODO: fails if key isn't in the map
+;;              for cmd = (lookup-key-ignore-too-long evil-blink-popup-map input)
+;;              while cmd
+;;              do (call-interactively cmd)
+;;              finally (setq unread-command-events
+;;                            (nconc (listify-key-sequence input)
+;;                                   unread-command-events))))
+;;   (progn
+;;     (evil-blink--use-popup-map)
+;;     ;; TODO: fails. compare SPC ; , e with l
+;;     ;; TODO: why does it work all of a fucking sudden?
+;;     (message "%s" (read-char))
+;;     ;; TODO: do we actually need this?
+;;     (discard-input))
+
+;;   ;; NOTE: this is pretty much what we want. `read-key-sequence' still reads nonexistent keys
+;;   (let ((overriding-terminal-local-map nil)
+;;         (overriding-local-map evil-blink-popup-map)
+;;         (old-global (current-global-map))
+;;         keys)
+;;     (use-global-map (make-sparse-keymap))
+;;     (setq keys (read-key-sequence ""))
+;;     (use-global-map old-global)
+;;     keys)
+
+;;   ;; TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+;;   ;; TODO: we could
+;;   ;; - `let' `overriding-local-map' be `evil-blink-popup-map'
+;;   ;; - then use a similar technique to `evil-read-key' to read sequences
+;;   ;; - maybe clear any keys lying around with `discard-input'... but
+;;   ;;   will this conflict with `evil-execute-macro'?
+;;   ;;       - NOTE: in case of typos like C-x f insteaad of C-x d
+;;   ;;       - I think not, but we can still check to be sure
+;;   ;; but we should figure out how to push to unread-command-events still
+;;   ;; TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+;;   (read-key-sequence "")
+;;   ;; TODO: a problem is that if we don't disable other maps, we'll read extra keys
+;;   ;;       for example, maybe the user wants to use the SPC register, but we read SPC ; , e
+;;   )
+
+;; (unless t
+;;   (defcustom evil-blink-scroll-down-key (kbd "C-f")
+;;     "The key to scroll the popup buffer down."
+;;     :type 'key-sequence)
+
+;;   (defcustom evil-blink-scroll-up-key (kbd "C-b")
+;;     "The key to scroll the popup buffer up."
+;;     :type 'key-sequence)
+
+;;   (defun evil-blink--read-key (&optional prompt)
+;;     (let ((evil-read-key-map (copy-keymap evil-read-key-map)))
+;;       ;; `evil-read-key' expects `evil-read-key-map' to contain
+;;       ;; commands that return key sequences, so we need to call
+;;       ;; `evil-read-key' again inside the scroll commands.
+;;       (define-key evil-read-key-map evil-blink-scroll-down-key
+;;         (lambda ()
+;;           (interactive)
+;;           (condition-case nil
+;;               (scroll-up)
+;;             (beginning-of-buffer nil))
+;;           (evil-read-key prompt)))
+;;       (define-key evil-read-key-map evil-blink-scroll-up-key
+;;         (lambda ()
+;;           (interactive)
+;;           (condition-case nil
+;;               (scroll-down)
+;;             (end-of-buffer nil))
+;;           (evil-read-key prompt)))
+;;       (evil-read-key)))
+;;   ;; then we can just put a cl-letf in the generator macro
+;;   (evil-blink--read-key)
+;;   )
+
 (progn ; test customizations
   (custom-set-faces
-   '(evil-blink-group-name ((t (:inherit font-lock-keyword-face :weight bold))))
-   '(evil-blink-entry-name ((t (:inherit font-lock-function-name-face :weight bold)))))
+   '(evil-blink-group-name ((t (:inherit font-lock-function-name-face :weight bold :underline t))))
+   '(evil-blink-entry-name ((t (:inherit font-lock-function-name-face)))))
   (set-face-background 'internal-border
                        (face-foreground 'font-lock-comment-face))
-  (gsetq evil-blink-register-char-limit 100)
+  (gsetq evil-blink-register-char-limit 100
+         evil-blink-idle-delay 0.1)
   (gsetq evil-blink-extra-posframe-args
          `(
-           ;; NOTE: looks like :background-color only enables the
-           ;; internal border if the color is different from the usual
-           ;; background.
            :background-color ,(face-background 'mode-line)
            :right-fringe 8
-           ;; TODO: dynamic resizing?
-           ;; or could we impose a general display limit?
-           ;; - evil-blink-entry-description-limit
-           :width 80
+           :width 50
            :height 20
            :poshandler posframe-poshandler-point-bottom-left-corner
-           ;; :internal-border-width 1
+           :internal-border-width 1
            )))
-
-(general-def 'normal
-  "q"  'evil-blink-record-macro
-  "\"" 'evil-blink-use-register
-  "@"  'evil-blink-execute-macro)
-
-(general-def 'insert
-  "C-r" 'evil-blink-paste-from-register)
-
-;; (setq evil-blink-register-group-alist (assoc-delete-all "Named" evil-blink-register-group-alist))
-;; NOTE: setting the register limit to 100 makes the execution almost instant
-;; (gsetq evil-blink-register-char-limit 100)
-;; (gsetq evil-blink-register-char-limit 50)
-;; even with yanking yasnippet.el 9 times
-;; NOTE: should put in readme that I recommend to set the limit to one
-;; past the width of the :height posframe parameter, if supplied.
-(general-def 'normal
-  "SPC SPC" (lambda ()
-              (interactive)
-              (message "%S"
-                       (evil-blink--registers-string))))
 
 (unless t
   (progn
@@ -263,9 +527,20 @@ and another for the contents."
     )
   )
 
-;; independent format string arg order
-(progn
-  ;; actually there's that one function
-  "[^%]%c" ;; TODO: we should count the number of preceding %. Or replace the double %'s with a single.
 
-  (replace-regexp-in-string "%%" "%" "%%%%%%%%%%%"))
+;; NOTE: this could be the default format if format-spec allows it
+;; if they want a header, they can just add it with the header string spec
+;;         - so then, should we provide a different header format and
+;;           separator for both registers and marks?
+(format "%s%-8d%-8d%s" "Header:\nline    column  buffer\n" 1 1 (buffer-name))
+(format "l: %-5d c: %-5d in %s" 1 1 (buffer-name))
+
+(let* ((mark (char-to-string ?a))
+       (line 10)
+       (column 10)
+       (buffer (current-buffer))
+       (spec (format-spec-make ?m mark ?l line ?c column ?b buffer)))
+  ;; (format-spec "%m: l=%-5l c=%-5c" spec)
+  ;; (format-spec "%m: l=%-5l c=%-5c in %b" spec)
+  (format-spec "%m: [l: %-5l, c: %-5c]" spec)
+  (format-spec "%m: [l: %-5l, c: %-5c] %b" spec))
