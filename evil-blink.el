@@ -228,7 +228,7 @@ the keys of such commands will not be read."
   (evil-blink--with-popup-map
     (catch 'char
       (while t
-        (let* ((keys (read-key-sequence nil t))
+        (let* ((keys (read-key-sequence nil nil t))
                (cmd (key-binding keys)))
           (cond
            (cmd
@@ -242,43 +242,47 @@ the keys of such commands will not be read."
             (user-error "%s is undefined" (key-description keys)))))))))
 
 ;; * Minor Mode
-;; TODO: Maybe keyword args just to be more readable (:wrap :display)
-(defmacro evil-blink--define-wrapper (name wrapped-fn string-fn)
-  ;; TODO: use `evil-define-command' and copy with evil's command properties
-  ;;       - `evil-get-command-properties' `evil-add-command-properties'
+;; TODO: maybe move this one to the posframe section or reorganize everything?
+(defun evil-blink--call-with-popup (fn display-fn)
+  (apply
+   fn
+   (unwind-protect
+       (progn
+         (evil-blink--idle-show (funcall display-fn))
+         (cl-letf (((symbol-function 'evil-read-key) #'evil-blink--read-register-or-mark)
+                   ((symbol-function 'read-char) #'evil-blink--read-register-or-mark))
+           (advice-eval-interactive-spec (cl-second (interactive-form fn)))))
+     (evil-blink--hide))))
+
+(cl-defmacro evil-blink--define-wrapper (name &key wrap display)
+  (declare (indent defun))
   (cl-assert (symbolp name))
-  (cl-assert (commandp wrapped-fn))
-  (cl-assert (functionp string-fn))
-  `(defun ,name ()
-     ,(format "Wrapper function for `%s' that shows a posframe preview." wrapped-fn)
+  (cl-assert (commandp wrap))
+  (cl-assert (functionp display))
+  `(evil-define-command ,name ()
+     ,(format "Wrapper function for `%s' that shows a posframe preview." wrap)
+     ,@(evil-get-command-properties wrap)
      (interactive)
-     (setq this-command #',wrapped-fn)
-     (apply
-      #',wrapped-fn
-      (unwind-protect
-          (progn
-            (evil-blink--idle-show (,string-fn))
-            (cl-letf (((symbol-function 'evil-read-key) #'evil-blink--read-register-or-mark)
-                      ((symbol-function 'read-char) #'evil-blink--read-register-or-mark))
-              (advice-eval-interactive-spec (cl-second (interactive-form #',wrapped-fn)))))
-        (evil-blink--hide)))))
+     (setq this-command #',wrap)
+     (evil-blink--call-with-popup #',wrap #',display)))
 
 (evil-blink--define-wrapper evil-blink-use-register
-                            evil-use-register
-                            evil-blink--registers-string)
+  :wrap evil-use-register
+  :display evil-blink--registers-string)
 
 (evil-blink--define-wrapper evil-blink-execute-macro
-                            evil-execute-macro
-                            evil-blink--registers-string)
+  :wrap evil-execute-macro
+  :display evil-blink--registers-string)
 
 (evil-blink--define-wrapper evil-blink-record-macro
-                            evil-record-macro
-                            evil-blink--registers-string)
+  :wrap evil-record-macro
+  :display evil-blink--registers-string)
 
 (evil-blink--define-wrapper evil-blink-paste-from-register
-                            evil-paste-from-register
-                            evil-blink--registers-string)
+  :wrap evil-paste-from-register
+  :display evil-blink--registers-string)
 
+;;;###autoload
 (define-minor-mode evil-blink-mode
   "A minor mode to preview marks and registers before using them."
   :global t
