@@ -31,6 +31,15 @@
 
 ;;; Code:
 
+;; TODO: sometimes, the buffer focus changes when using evil-owl commands
+;;       can't figure out an exact case, but it often happens with mark commands
+;;       do something in the current buffer, switch to another, then use m
+;;     seems that `evil-get-marker' doesn't properly switch the buffer back
+;;       - i think the culprits are the ` and ' marks
+
+;; TODO: interesting comment about the '. mark
+;;    https://github.com/Andrew-William-Smith/evil-fringe-mark/blob/master/evil-fringe-mark.el#L284
+
 ;; * Setup
 (require 'cl-lib)
 (require 'evil)
@@ -43,6 +52,7 @@
 
 ;; * User Options
 ;; ** Variables
+;; TODO: we don't actually need the -alist suffix, do we?
 (defcustom evil-owl-register-group-alist
   `(("Named"     . ,(cl-loop for c from ?a to ?z collect c))
     ("Numbered"  . ,(cl-loop for c from ?0 to ?9 collect c))
@@ -53,14 +63,45 @@ Groups and registers will be displayed in the same order they appear
 in this variable."
   :type '(alist :key string :value (repeat character)))
 
-(defcustom evil-owl-header-format "%s\n"
-  "The format for a section header."
+(defcustom evil-owl-mark-group-alist
+  `(("Named Local" . ,(cl-loop for c from ?a to ?z collect c))
+    ("Named Global" . ,(cl-loop for c from ?A to ?Z collect c))
+    ("Numbered" . ,(cl-loop for c from ?0 to ?9 collect c))
+    ;; `evil-get-marker' currently bugs out with the last jump marks.
+    ;; If they're in a different buffer, `evil-get-marker' will switch
+    ;; to that buffer and leave it open.
+    ("Special" . (?[ ?] ?< ?> ?^ ?. ?( ?) ?{ ?})))
+  "" ; TODO: docstring
+  :type '(alist :key string :value (repeat character)))
+
+(defcustom evil-owl-header-format "%s"
+  "Format for group headers.
+An empty string means to not show a header."
   :type 'string)
 
-(defcustom evil-owl-entry-format "%s: %s\n"
-  "The format for an entry.
-There should be two string placeholders: one for the mark or register
-and another for the contents."
+(defcustom evil-owl-register-format "%r: %s"
+  "Format for register entries.
+Possible format specifiers are:
+- %r: the register
+- %s: the register's contents"
+  :type 'string)
+
+(defcustom evil-owl-local-mark-format "%m: [l: %-5l, c: %-5c]"
+  "Format for local mark entries.
+Possible format specifiers are:
+- %m: the mark
+- %l: the mark's line number
+- %c: the mark's column number
+- %b: the mark's buffer"
+  :type 'string)
+
+(defcustom evil-owl-global-mark-format "%m: [l: %-5l, c: %-5c] %b"
+  "Format for global mark entries.
+Possible format specifiers are:
+- %m: the mark
+- %l: the mark's line number
+- %c: the mark's column number
+- %b: the mark's buffer"
   :type 'string)
 
 (defcustom evil-owl-separator "\n"
@@ -87,32 +128,27 @@ and another for the contents."
 (defface evil-owl-group-name '((t (:inherit font-lock-function-name-face)))
   "The face for group names.")
 
-(defface evil-owl-entry-name '((t (:inherit font-lock-function-name-face)))
+(defface evil-owl-entry-name '((t (:inherit font-lock-type-face)))
   "The face for marks and registers.")
 
 ;; * Display Strings
 ;; ** Common
-(defun evil-owl--section-string (group entry-names describe-fn)
-  (let ((header (format evil-owl-header-format
-                        (propertize group 'face 'evil-owl-group-name)))
-        ;; TODO: can we make this cleaner?
-        (body (cl-loop for entry-name in entry-names
-                       for description = (funcall describe-fn entry-name)
-                       when (cl-plusp (length description))
-                       concat (format evil-owl-entry-format
-                                      (propertize (char-to-string entry-name)
-                                                  'face
-                                                  'evil-owl-entry-name)
-                                      description))))
-    (concat header body evil-owl-separator)))
+(defun evil-owl--header-string (group-name)
+  (if (string-empty-p evil-owl-header-format)
+      ""
+    (concat
+     (format evil-owl-header-format
+             (propertize group-name 'face 'evil-owl-group-name))
+     "\n")))
 
-(defun evil-owl--display-string (group-alist describe-fn)
-  ;; TODO: this could probably be a lot cleaner with `mapconcat'
-  ;; instead of using `string-remove-suffix'
-  (string-remove-suffix
-   evil-owl-separator
-   (cl-loop for (group . entry-names) in group-alist
-            concat (evil-owl--section-string group entry-names describe-fn))))
+(defun evil-owl--display-string (group-alist entry-string-fn)
+  (mapconcat
+   (lambda (group)
+     (let ((header (evil-owl--header-string (car group)))
+           (body (mapconcat entry-string-fn (cdr group) "")))
+       (concat header body)))
+   group-alist
+   evil-owl-separator))
 
 ;; ** Registers
 (defun evil-owl--get-register (reg)
@@ -127,10 +163,57 @@ and another for the contents."
      ((vectorp contents)
       (key-description contents)))))
 
-(defun evil-owl--registers-string ()
-  "Obtain the display string for registers."
+(defun evil-owl--register-entry-string (reg)
+  (let* ((contents (evil-owl--get-register reg))
+         (spec (format-spec-make ?r (propertize (char-to-string reg)
+                                                'face 'evil-owl-entry-name)
+                                 ?s contents)))
+    (if (cl-plusp (length contents))
+        (concat (format-spec evil-owl-register-format spec) "\n")
+      "")))
+
+(defun evil-owl--registers-display-string ()
   (evil-owl--display-string evil-owl-register-group-alist
-                            #'evil-owl--get-register))
+                            #'evil-owl--register-entry-string))
+
+;; ** Marks
+(defun evil-owl--global-marker-p (mark)
+  (or (<= ?A mark ?Z)
+      (and evil-jumps-cross-buffers (memq mark '(?` ?')))))
+
+(defun evil-owl--get-mark (mark)
+  (when-let* ((pos (condition-case nil
+                       (evil-get-marker mark)
+                     ;; Some marks error if their use conditions
+                     ;; haven't been met (e.g. '> assumes that there's
+                     ;; a previous/current visual selection)
+                     (error nil)))
+              (buffer (cond ((numberp pos) (current-buffer))
+                            ((markerp pos) (marker-buffer pos)))))
+    (with-current-buffer buffer
+      (let ((line (line-number-at-pos pos))
+            (column (save-excursion
+                      (goto-char pos)
+                      (current-column))))
+        (list line column (current-buffer))))))
+
+(defun evil-owl--mark-entry-string (mark)
+  (if-let ((pos-info (evil-owl--get-mark mark)))
+      (cl-destructuring-bind (line column buffer) pos-info
+        (let ((format (if (evil-owl--global-marker-p mark)
+                          evil-owl-global-mark-format
+                        evil-owl-local-mark-format))
+              (spec (format-spec-make ?m (propertize (char-to-string mark)
+                                                     'face 'evil-owl-entry-name)
+                                      ?l line
+                                      ?c column
+                                      ?b buffer)))
+          (concat (format-spec format spec) "\n")))
+    ""))
+
+(defun evil-owl--marks-display-string ()
+  (evil-owl--display-string evil-owl-mark-group-alist
+                            #'evil-owl--mark-entry-string))
 
 ;; * Posframe
 ;; ** Show / Hide
@@ -149,7 +232,7 @@ and another for the contents."
            :string string
            :position (point)
            evil-owl-extra-posframe-args)
-    ;; match :reg's behavior
+    ;; match evil's behavior
     (posframe-funcall evil-owl--buffer
                       (lambda () (setq-local truncate-lines t)))))
 
@@ -226,6 +309,7 @@ the keys of such commands will not be read."
 ;; TODO: maybe move this one to the posframe section or reorganize everything?
 (defun evil-owl--call-with-popup (fn display-fn)
   (apply
+   #'funcall-interactively
    fn
    (unwind-protect
        (progn
@@ -249,19 +333,31 @@ the keys of such commands will not be read."
 
 (evil-owl--define-wrapper evil-owl-use-register
   :wrap evil-use-register
-  :display evil-owl--registers-string)
+  :display evil-owl--registers-display-string)
 
 (evil-owl--define-wrapper evil-owl-execute-macro
   :wrap evil-execute-macro
-  :display evil-owl--registers-string)
+  :display evil-owl--registers-display-string)
 
 (evil-owl--define-wrapper evil-owl-record-macro
   :wrap evil-record-macro
-  :display evil-owl--registers-string)
+  :display evil-owl--registers-display-string)
 
 (evil-owl--define-wrapper evil-owl-paste-from-register
   :wrap evil-paste-from-register
-  :display evil-owl--registers-string)
+  :display evil-owl--registers-display-string)
+
+(evil-owl--define-wrapper evil-owl-set-marker
+  :wrap evil-set-marker
+  :display evil-owl--marks-display-string)
+
+(evil-owl--define-wrapper evil-owl-goto-mark
+  :wrap evil-goto-mark
+  :display evil-owl--marks-display-string)
+
+(evil-owl--define-wrapper evil-owl-goto-mark-line
+  :wrap evil-goto-mark-line
+  :display evil-owl--marks-display-string)
 
 ;;;###autoload
 (define-minor-mode evil-owl-mode
@@ -273,7 +369,10 @@ the keys of such commands will not be read."
              'normal map
              [remap evil-record-macro] #'evil-owl-record-macro
              [remap evil-execute-macro] #'evil-owl-execute-macro
-             [remap evil-use-register] #'evil-owl-use-register)
+             [remap evil-use-register] #'evil-owl-use-register
+             [remap evil-set-marker] #'evil-owl-set-marker
+             [remap evil-goto-mark] #'evil-owl-goto-mark
+             [remap evil-goto-mark-line] #'evil-owl-goto-mark-line)
             (evil-define-key*
              'insert map
              [remap evil-paste-from-register] #'evil-owl-paste-from-register)
@@ -286,6 +385,7 @@ the keys of such commands will not be read."
    '(evil-owl-entry-name ((t (:inherit font-lock-function-name-face)))))
   (set-face-background 'internal-border
                        (face-foreground 'font-lock-comment-face))
+  (gsetq posframe-mouse-banish nil)
   (gsetq evil-owl-register-char-limit 100
          evil-owl-idle-delay 0.1)
   (gsetq evil-owl-extra-posframe-args
@@ -297,136 +397,3 @@ the keys of such commands will not be read."
            :poshandler posframe-poshandler-point-bottom-left-corner
            :internal-border-width 1
            )))
-
-(defcustom evil-owl-header-format "%s"
-  "Format for group headers."
-  :type 'string)
-
-(defcustom evil-owl-register-format "%r: %s"
-  "Format for register entries.
-Possible format specifiers are:
-- %r: the register
-- %s: the register's contents"
-  :type 'string)
-
-(defcustom evil-owl-local-mark-format "%m: [l: %-5l, c: %-5c]"
-  "Format for local mark entries.
-Possible format specifiers are:
-- %m: the mark
-- %l: the mark's line number
-- %c: the mark's column number
-- %b: the mark's buffer"
-  :type 'string)
-
-;; TODO: should the user add the newlines, or should we add them ourselves?
-(defcustom evil-owl-global-mark-format "%m: [l: %-5l, c: %-5c] %b"
-  "Format for global mark entries.
-Possible format specifiers are:
-- %m: the mark
-- %l: the mark's line number
-- %c: the mark's column number
-- %b: the mark's buffer"
-  :type 'string)
-
-(defun evil-owl--register-entry-string (reg)
-  (let* ((contents (evil-owl--get-register reg))
-         (spec (format-spec-make ?r (char-to-string reg) ?s contents)))
-    (if (cl-plusp (length contents))
-        ;; TODO: use `propertize' to add faces
-        (concat (format-spec evil-owl-register-format spec) "\n")
-      "")))
-
-;; TODO: clean this up
-(defun evil-owl--get-mark (mark)
-  (when-let* ((pos (condition-case nil
-                       (evil-get-marker mark)
-                     ;; some marks error if their use conditions
-                     ;; haven't been met (e.g. '> assumes that there's
-                     ;; a previous/current visual selection)
-                     (error nil)))
-              (buffer (cond ((numberp pos) (current-buffer))
-                            ((markerp pos) (marker-buffer pos)))))
-    (with-current-buffer buffer
-      (let ((line (line-number-at-pos pos))
-            (column (save-excursion
-                      (goto-char pos)
-                      (current-column))))
-        (list line column (current-buffer))))))
-
-;; TODO: clean this up
-;; TODO: test how efficient this is with lots of global marks
-;;        it's prob really slow
-(defun evil-owl--mark-entry-string (mark)
-  (if-let ((pos-info (evil-owl--get-mark mark)))
-      (cl-destructuring-bind (line column buffer) pos-info
-        (let ((format (if (evil-global-marker-p mark)
-                          evil-owl-global-mark-format
-                        evil-owl-local-mark-format))
-              (spec (format-spec-make ?m (propertize (char-to-string mark)
-                                                     'face 'evil-owl-entry-name)
-                                      ?l line
-                                      ?c column
-                                      ?b buffer)))
-          (concat (format-spec format spec) "\n")))
-    ""))
-
-;; TODO: clean up because this feels ugly to me (the concat "\n" part)
-;;       should `evil-owl--display-string' take care of adding the newlines?
-(defun evil-owl--header-string (group-name)
-  (if (string-empty-p evil-owl-header-format)
-      ""
-    (concat
-     (format evil-owl-header-format
-             (propertize group-name 'face 'evil-owl-group-name))
-     "\n")))
-
-;; TODO: check if everything else uses ENTRY/ENTRIES as the name, instead of entry-names
-(defun evil-owl--display-string (group-alist entry-string-fn)
-  (mapconcat
-   (lambda (group)
-     (let ((header (evil-owl--header-string (car group)))
-           (body (mapconcat entry-string-fn (cdr group) "")))
-       (concat header body)))
-   group-alist
-   evil-owl-separator))
-
-(defun evil-owl--registers-display-string ()
-  (evil-owl--display-string evil-owl-register-group-alist
-                            #'evil-owl--register-entry-string))
-
-(defun evil-owl--marks-display-string ()
-  (evil-owl--display-string evil-owl-mark-group-alist
-                            #'evil-owl--mark-entry-string))
-
-(defcustom evil-owl-mark-group-alist
-  `(("Named" . ,(concat
-                 ;; TODO: should we keep the lower + upper together or separate?
-                 ;;       could split into "Lowercase" + "Uppercase"
-                 ;;                    or "Lower" + "Upper"
-                 ;;                    or "Named Local" + "Named Global"
-                 (cl-loop for c from ?a to ?z collect c)
-                 (cl-loop for c from ?A to ?Z collect c)))
-    ("Numbered" . ,(cl-loop for c from ?0 to ?9 collect c))
-    ;; TODO: the '> errors if there hasn't been a visual selection yet
-    ;;      looks like we might need a custom display function after all...
-    ;;      or is there a way to do it without?
-    ;;            - we could wrap the `evil-get-marker' call in `condition-case'
-    ;;              to limit the errors we catch
-    ;;              - it'll be a wrong type argument
-    ;; TODO: Are all the special registers actually local, despite
-    ;;       what `evil-global-marker-p' says?
-    ;;       - seems like they all are
-    ;;         so we need to roll our own `evil-owl--global-mark-p' function
-    ;; evil's implementation of the '[ and '] marks are kind of off.
-    ;; See https://github.com/emacs-evil/evil/issues/668
-    ("Special" . (?[ ?] ?< ?> ?' ?` ?^ ?. ?( ?) ?{ ?})))
-  "" ; TODO: docstring
-  :type '(alist :key string :value (repeat character)))
-
-(evil-owl--define-wrapper evil-owl-set-marker
-  :wrap evil-set-marker
-  :display evil-owl--marks-display-string)
-
-(evil-owl--define-wrapper evil-owl-use-register
-  :wrap evil-use-register
-  :display evil-owl--registers-display-string)
