@@ -227,6 +227,7 @@ Possible format specifiers are:
 ;; e.g. `evil-owl--show' --> `evil-owl--show-popup'
 (defun evil-owl--show (string)
   (when (posframe-workable-p)
+  (when (and (posframe-workable-p) (not (minibufferp)))
     (apply #'posframe-show
            evil-owl--buffer
            :string string
