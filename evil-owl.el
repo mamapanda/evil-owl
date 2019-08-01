@@ -117,7 +117,7 @@ Possible format specifiers are:
   "Maximum number of characters to consider in a string register."
   :type 'integer)
 
-(defcustom evil-owl-lighter " owl"
+(defcustom evil-owl-lighter " evil-owl"
   "Lighter for evil-owl."
   :type 'string)
 
@@ -228,7 +228,7 @@ MARK points nowhere."
 
 ;; * Posframe
 ;; ** Show / Hide
-(defconst evil-owl--buffer " *evil-owl*"
+(defconst evil-owl--buffer "*evil-owl*"
   "The buffer name for the popup.")
 
 (defvar evil-owl--timer nil
@@ -294,8 +294,6 @@ MARK points nowhere."
              ,@body)
          (use-global-map ,current-global-map)))))
 
-;; TODO: probably reorganize this
-;; TODO: check if this conflicts with macros
 (defun evil-owl--read-register-or-mark (&rest _)
   "Read a register or mark character.
 This function allows executing commands in `evil-owl-popup-map', and
@@ -317,7 +315,6 @@ the keys of such commands will not be read."
             (user-error "%s is undefined" (key-description keys)))))))))
 
 ;; * Minor Mode
-;; TODO: maybe move this one to the posframe section or reorganize everything?
 (defun evil-owl--call-with-popup (fn display-fn)
   "Call FN with a posframe preview showing DISPLAY-FN's result."
   (apply
