@@ -27,18 +27,10 @@
 
 ;;; Commentary:
 ;;
-;; TODO: commentary section
+;; evil-owl provides a posframe preview popup for evil's mark and
+;; register commands.  To enable the popup, turn on `evil-owl-mode'.
 
 ;;; Code:
-
-;; TODO: sometimes, the buffer focus changes when using evil-owl commands
-;;       can't figure out an exact case, but it often happens with mark commands
-;;       do something in the current buffer, switch to another, then use m
-;;     seems that `evil-get-marker' doesn't properly switch the buffer back
-;;       - i think the culprits are the ` and ' marks
-
-;; TODO: interesting comment about the '. mark
-;;    https://github.com/Andrew-William-Smith/evil-fringe-mark/blob/master/evil-fringe-mark.el#L284
 
 ;; * Setup
 (require 'cl-lib)
@@ -52,8 +44,7 @@
 
 ;; * User Options
 ;; ** Variables
-;; TODO: we don't actually need the -alist suffix, do we?
-(defcustom evil-owl-register-group-alist
+(defcustom evil-owl-register-groups
   `(("Named"     . ,(cl-loop for c from ?a to ?z collect c))
     ("Numbered"  . ,(cl-loop for c from ?0 to ?9 collect c))
     ("Special"   . (?\" ?* ?+ ?-))
@@ -63,15 +54,21 @@ Groups and registers will be displayed in the same order they appear
 in this variable."
   :type '(alist :key string :value (repeat character)))
 
-(defcustom evil-owl-mark-group-alist
+(defcustom evil-owl-mark-groups
   `(("Named Local" . ,(cl-loop for c from ?a to ?z collect c))
     ("Named Global" . ,(cl-loop for c from ?A to ?Z collect c))
     ("Numbered" . ,(cl-loop for c from ?0 to ?9 collect c))
-    ;; `evil-get-marker' currently bugs out with the last jump marks.
-    ;; If they're in a different buffer, `evil-get-marker' will switch
-    ;; to that buffer and leave it open.
-    ("Special" . (?[ ?] ?< ?> ?^ ?. ?( ?) ?{ ?})))
-  "" ; TODO: docstring
+    ;; With the last jump marks, `evil-get-marker' won't necessarily
+    ;; preserve the current buffer. Gotta file a PR I guess.
+    ;;
+    ;; Also, interesting comment about the last change mark:
+    ;; https://github.com/Andrew-William-Smith/evil-fringe-mark/blob/a1689fddb7ee79aaa720a77aada1208b8afd5c20/evil-fringe-mark.el#L284
+    ;;
+    ;; As a result, these 3 marks are left out by default.
+    ("Special" . (?[ ?] ?< ?> ?^ ?( ?) ?{ ?})))
+  "An alist of mark group names to marks.
+Groups and marks will be displayed in the same order they appear in
+this variable."
   :type '(alist :key string :value (repeat character)))
 
 (defcustom evil-owl-header-format "%s"
@@ -121,7 +118,7 @@ Possible format specifiers are:
   :type 'integer)
 
 (defcustom evil-owl-lighter " owl"
-  "Lighter for `evil-owl-mode'."
+  "Lighter for evil-owl."
   :type 'string)
 
 ;; ** Faces
@@ -134,6 +131,7 @@ Possible format specifiers are:
 ;; * Display Strings
 ;; ** Common
 (defun evil-owl--header-string (group-name)
+  "Return the header string for a group, where GROUP-NAME is the group's name."
   (if (string-empty-p evil-owl-header-format)
       ""
     (concat
@@ -141,18 +139,23 @@ Possible format specifiers are:
              (propertize group-name 'face 'evil-owl-group-name))
      "\n")))
 
-(defun evil-owl--display-string (group-alist entry-string-fn)
+(defun evil-owl--display-string (groups entry-string-fn)
+  "Return the display string to put in the posframe buffer.
+GROUPS is an alist of group names to group members.
+ENTRY-STRING-FN is a function that takes one parameter, the entry to
+show, and outputs an entry string (newline included)."
   (mapconcat
    (lambda (group)
      (let ((header (evil-owl--header-string (car group)))
            (body (mapconcat entry-string-fn (cdr group) "")))
        (concat header body)))
-   group-alist
+   groups
    evil-owl-separator))
 
 ;; ** Registers
 (defun evil-owl--get-register (reg)
-  "Get the contents of REG as a string."
+  "Get the contents of REG as a string.
+The result is nil if REG is empty."
   (when-let ((contents (evil-get-register reg t)))
     (cond
      ((stringp contents)
@@ -164,6 +167,7 @@ Possible format specifiers are:
       (key-description contents)))))
 
 (defun evil-owl--register-entry-string (reg)
+  "Compute the entry string for REG."
   (let* ((contents (evil-owl--get-register reg))
          (spec (format-spec-make ?r (propertize (char-to-string reg)
                                                 'face 'evil-owl-entry-name)
@@ -173,15 +177,20 @@ Possible format specifiers are:
       "")))
 
 (defun evil-owl--registers-display-string ()
-  (evil-owl--display-string evil-owl-register-group-alist
+  "Compute the posframe display string for registers."
+  (evil-owl--display-string evil-owl-register-groups
                             #'evil-owl--register-entry-string))
 
 ;; ** Marks
 (defun evil-owl--global-marker-p (mark)
+  "Return whether MARK is a global mark."
   (or (<= ?A mark ?Z)
       (and evil-jumps-cross-buffers (memq mark '(?` ?')))))
 
 (defun evil-owl--get-mark (mark)
+  "Get the position stored in MARK.
+The result is a list (line-number column-number buffer), or nil if
+MARK points nowhere."
   (when-let* ((pos (condition-case nil
                        (evil-get-marker mark)
                      ;; Some marks error if their use conditions
@@ -198,6 +207,7 @@ Possible format specifiers are:
         (list line column (current-buffer))))))
 
 (defun evil-owl--mark-entry-string (mark)
+  "Compute the entry string for MARK."
   (if-let ((pos-info (evil-owl--get-mark mark)))
       (cl-destructuring-bind (line column buffer) pos-info
         (let ((format (if (evil-owl--global-marker-p mark)
@@ -212,7 +222,8 @@ Possible format specifiers are:
     ""))
 
 (defun evil-owl--marks-display-string ()
-  (evil-owl--display-string evil-owl-mark-group-alist
+  "Compute the posframe display string for markers."
+  (evil-owl--display-string evil-owl-mark-groups
                             #'evil-owl--mark-entry-string))
 
 ;; * Posframe
@@ -223,25 +234,24 @@ Possible format specifiers are:
 (defvar evil-owl--timer nil
   "The timer for the popup.")
 
-;; TODO: probably rename these functions to be more description
-;; e.g. `evil-owl--show' --> `evil-owl--show-popup'
-(defun evil-owl--show (string)
-  (when (posframe-workable-p)
+(defun evil-owl--show-popup (string)
+  "Show STRING in a posframe."
   (when (and (posframe-workable-p) (not (minibufferp)))
     (apply #'posframe-show
            evil-owl--buffer
            :string string
            :position (point)
            evil-owl-extra-posframe-args)
-    ;; match evil's behavior
     (posframe-funcall evil-owl--buffer
                       (lambda () (setq-local truncate-lines t)))))
 
-(defun evil-owl--idle-show (string)
+(defun evil-owl--idle-show-popup (string)
+  "Show STRING in a posframe after `evil-owl-idle-delay' seconds."
   (setq evil-owl--timer
-        (run-at-time evil-owl-idle-delay nil #'evil-owl--show string)))
+        (run-at-time evil-owl-idle-delay nil #'evil-owl--show-popup string)))
 
-(defun evil-owl--hide ()
+(defun evil-owl--hide-popup ()
+  "Hide the posframe."
   (when evil-owl--timer
     (cancel-timer evil-owl--timer)
     (setq evil-owl--timer nil))
@@ -309,18 +319,22 @@ the keys of such commands will not be read."
 ;; * Minor Mode
 ;; TODO: maybe move this one to the posframe section or reorganize everything?
 (defun evil-owl--call-with-popup (fn display-fn)
+  "Call FN with a posframe preview showing DISPLAY-FN's result."
   (apply
    #'funcall-interactively
    fn
    (unwind-protect
        (progn
-         (evil-owl--idle-show (funcall display-fn))
+         (evil-owl--idle-show-popup (funcall display-fn))
          (cl-letf (((symbol-function 'evil-read-key) #'evil-owl--read-register-or-mark)
                    ((symbol-function 'read-char) #'evil-owl--read-register-or-mark))
            (advice-eval-interactive-spec (cl-second (interactive-form fn)))))
-     (evil-owl--hide))))
+     (evil-owl--hide-popup))))
 
 (cl-defmacro evil-owl--define-wrapper (name &key wrap display)
+  "Define NAME as a wrapper around WRAP.
+DISPLAY is a function that outputs a string to show in the preview
+posframe."
   (declare (indent defun))
   (cl-assert (symbolp name))
   (cl-assert (commandp wrap))
@@ -366,17 +380,13 @@ the keys of such commands will not be read."
   :global t
   :lighter evil-owl-lighter
   :keymap (let ((map (make-sparse-keymap)))
-            (evil-define-key*
-             'normal map
-             [remap evil-record-macro] #'evil-owl-record-macro
-             [remap evil-execute-macro] #'evil-owl-execute-macro
-             [remap evil-use-register] #'evil-owl-use-register
-             [remap evil-set-marker] #'evil-owl-set-marker
-             [remap evil-goto-mark] #'evil-owl-goto-mark
-             [remap evil-goto-mark-line] #'evil-owl-goto-mark-line)
-            (evil-define-key*
-             'insert map
-             [remap evil-paste-from-register] #'evil-owl-paste-from-register)
+            (define-key map [remap evil-record-macro] #'evil-owl-record-macro)
+            (define-key map [remap evil-execute-macro] #'evil-owl-execute-macro)
+            (define-key map [remap evil-use-register] #'evil-owl-use-register)
+            (define-key map [remap evil-paste-from-register] #'evil-owl-paste-from-register)
+            (define-key map [remap evil-set-marker] #'evil-owl-set-marker)
+            (define-key map [remap evil-goto-mark] #'evil-owl-goto-mark)
+            (define-key map [remap evil-goto-mark-line] #'evil-owl-goto-mark-line)
             map))
 
 ;; * scratch
@@ -398,3 +408,6 @@ the keys of such commands will not be read."
            :poshandler posframe-poshandler-point-bottom-left-corner
            :internal-border-width 1
            )))
+
+(provide 'evil-owl)
+;;; evil-owl.el ends here
