@@ -1,4 +1,4 @@
-;;; evil-owl.el --- posframe preview for evil's register and mark commands -*- lexical-binding: t -*-
+;;; evil-owl.el --- Show a posframe preview for evil's register and mark commands -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2019 Daniel Phan
 
@@ -35,7 +35,10 @@
 ;; * Setup
 (require 'cl-lib)
 (require 'evil)
+(require 'format-spec)
 (require 'posframe)
+(eval-when-compile
+  (require 'subr-x))
 
 (defgroup evil-owl nil
   "Register and mark preview popups."
@@ -55,9 +58,9 @@ in this variable."
   :type '(alist :key string :value (repeat character)))
 
 (defcustom evil-owl-mark-groups
-  `(("Named Local" . ,(cl-loop for c from ?a to ?z collect c))
+  `(("Named Local"  . ,(cl-loop for c from ?a to ?z collect c))
     ("Named Global" . ,(cl-loop for c from ?A to ?Z collect c))
-    ("Numbered" . ,(cl-loop for c from ?0 to ?9 collect c))
+    ("Numbered"     . ,(cl-loop for c from ?0 to ?9 collect c))
     ;; With the last jump marks, `evil-get-marker' won't necessarily
     ;; preserve the current buffer. Gotta file a PR I guess.
     ;;
@@ -65,7 +68,7 @@ in this variable."
     ;; https://github.com/Andrew-William-Smith/evil-fringe-mark/blob/a1689fddb7ee79aaa720a77aada1208b8afd5c20/evil-fringe-mark.el#L284
     ;;
     ;; As a result, these 3 marks are left out by default.
-    ("Special" . (?[ ?] ?< ?> ?^ ?( ?) ?{ ?})))
+    ("Special"      . (?\[ ?\] ?< ?> ?^ ?\( ?\) ?{ ?})))
   "An alist of mark group names to marks.
 Groups and marks will be displayed in the same order they appear in
 this variable."
@@ -333,9 +336,6 @@ the keys of such commands will not be read."
 DISPLAY is a function that outputs a string to show in the preview
 posframe."
   (declare (indent defun))
-  (cl-assert (symbolp name))
-  (cl-assert (commandp wrap))
-  (cl-assert (functionp display))
   `(evil-define-command ,name ()
      ,(format "Wrapper function for `%s' that shows a posframe preview." wrap)
      ,@(evil-get-command-properties wrap)
@@ -385,26 +385,6 @@ posframe."
             (define-key map [remap evil-goto-mark] #'evil-owl-goto-mark)
             (define-key map [remap evil-goto-mark-line] #'evil-owl-goto-mark-line)
             map))
-
-;; * scratch
-(progn ; test customizations
-  (custom-set-faces
-   '(evil-owl-group-name ((t (:inherit font-lock-function-name-face :weight bold :underline t))))
-   '(evil-owl-entry-name ((t (:inherit font-lock-function-name-face)))))
-  (set-face-background 'internal-border
-                       (face-foreground 'font-lock-comment-face))
-  (gsetq posframe-mouse-banish nil)
-  (gsetq evil-owl-register-char-limit 100
-         evil-owl-idle-delay 0.1)
-  (gsetq evil-owl-extra-posframe-args
-         `(
-           :background-color ,(face-background 'mode-line)
-           :right-fringe 8
-           :width 50
-           :height 20
-           :poshandler posframe-poshandler-point-bottom-left-corner
-           :internal-border-width 1
-           )))
 
 (provide 'evil-owl)
 ;;; evil-owl.el ends here
