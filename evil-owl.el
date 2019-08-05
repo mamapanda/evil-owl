@@ -1,4 +1,4 @@
-;;; evil-owl.el --- Show a posframe preview for evil's register and mark commands -*- lexical-binding: t -*-
+;;; evil-owl.el --- Preview evil's registers and marks in a posframe -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2019 Daniel Phan
 
@@ -179,7 +179,7 @@ The result is nil if REG is empty."
         (concat (format-spec evil-owl-register-format spec) "\n")
       "")))
 
-(defun evil-owl--registers-display-string ()
+(defun evil-owl--register-display-string ()
   "Compute the posframe display string for registers."
   (evil-owl--display-string evil-owl-register-groups
                             #'evil-owl--register-entry-string))
@@ -224,14 +224,14 @@ MARK points nowhere."
           (concat (format-spec format spec) "\n")))
     ""))
 
-(defun evil-owl--marks-display-string ()
+(defun evil-owl--mark-display-string ()
   "Compute the posframe display string for markers."
   (evil-owl--display-string evil-owl-mark-groups
                             #'evil-owl--mark-entry-string))
 
 ;; * Posframe
 ;; ** Show / Hide
-(defconst evil-owl--buffer "*evil-owl*"
+(defconst evil-owl--buffer " *evil-owl*"
   "The buffer name for the popup.")
 
 (defvar evil-owl--timer nil
@@ -312,9 +312,9 @@ the keys of such commands will not be read."
            ((and (stringp keys) (= (length keys) 1))
             (throw 'char (aref keys 0)))
            (t
-            ;; Keys that are represented with vectors and not
-            ;; strings (e.g. delete and f3) are not valid registers
-            ;; or marks.
+            ;; Keys represented with vectors (e.g. <delete> and <F3>)
+            ;; aren't valid registers or marks, since valid ones use
+            ;; ascii characters.
             (user-error "%s is undefined" (key-description keys)))))))))
 
 ;; * Minor Mode
@@ -345,31 +345,31 @@ posframe."
 
 (evil-owl--define-wrapper evil-owl-use-register
   :wrap evil-use-register
-  :display evil-owl--registers-display-string)
+  :display evil-owl--register-display-string)
 
 (evil-owl--define-wrapper evil-owl-execute-macro
   :wrap evil-execute-macro
-  :display evil-owl--registers-display-string)
+  :display evil-owl--register-display-string)
 
 (evil-owl--define-wrapper evil-owl-record-macro
   :wrap evil-record-macro
-  :display evil-owl--registers-display-string)
+  :display evil-owl--register-display-string)
 
 (evil-owl--define-wrapper evil-owl-paste-from-register
   :wrap evil-paste-from-register
-  :display evil-owl--registers-display-string)
+  :display evil-owl--register-display-string)
 
 (evil-owl--define-wrapper evil-owl-set-marker
   :wrap evil-set-marker
-  :display evil-owl--marks-display-string)
+  :display evil-owl--mark-display-string)
 
 (evil-owl--define-wrapper evil-owl-goto-mark
   :wrap evil-goto-mark
-  :display evil-owl--marks-display-string)
+  :display evil-owl--mark-display-string)
 
 (evil-owl--define-wrapper evil-owl-goto-mark-line
   :wrap evil-goto-mark-line
-  :display evil-owl--marks-display-string)
+  :display evil-owl--mark-display-string)
 
 ;;;###autoload
 (define-minor-mode evil-owl-mode
