@@ -56,15 +56,15 @@
         ("\"ayy" "j" "\"byy")
         (should (equal (evil-owl--register-display-string)
                        "Named
-a: asdf^J
-b: jkl;^J
+ a: asdf^J
+ b: jkl;^J
 
 Numbered
-1: jkl;^J
-2: asdf^J
+ 1: jkl;^J
+ 2: asdf^J
 
 Special
-\": jkl;^J
+ \": jkl;^J
 
 Read-only
 "))
@@ -76,21 +76,21 @@ Read-only
         ("\"ayy" "k" "diw" ":normal" [return] "/line" [return] "\"ryiw")
         (should (equal (evil-owl--register-display-string)
                        "Named
-a: jkl;^J
-r: line
+ a: jkl;^J
+ r: line
 
 Numbered
-1: line
-2: asdf
-3: jkl;^J
+ 1: line
+ 2: asdf
+ 3: jkl;^J
 
 Special
-\": line
--: asdf
+ \": line
+ -: asdf
 
 Read-only
-/: line
-:: normal
+ /: line
+ :: normal
 "))
         "\njkl;\n[l]ine\nowl\n"))))
 
@@ -114,18 +114,18 @@ Read-only
           ("ma" "j" "iemacs" [return] [return] [escape] "gg2l" "ml")
           (should (equal (evil-owl--mark-display-string)
                          "Named Local
-a: [l: 2    , c: 0    ]
-l: [l: 1    , c: 2    ]
+ a: [l: 2    , c: 0    ]
+ l: [l: 1    , c: 2    ]
 
 Named Global
-B: [l: 2    , c: 3    ]  *evil-owl-test*
+ B: [l: 2    , c: 3    ]  *evil-owl-test*
 
 Numbered
 
 Special
-^: [l: 5    , c: 0    ]
-{: [l: 1    , c: 0    ]
-}: [l: 4    , c: 0    ]
+ ^: [l: 5    , c: 0    ]
+ {: [l: 1    , c: 0    ]
+ }: [l: 4    , c: 0    ]
 "))
           "as[d]f\njkl;\nemacs\n\nline\nowl\n")
         "asdf\nfds[a]\nelisp\n")))
@@ -140,19 +140,19 @@ Special
           ("ma" "j" "iemacs" [return] [return] [escape] "gg2l" "m0")
           (should (equal (evil-owl--mark-display-string)
                          "Named Local
-a: [l: 2    , c: 0    ]
+ a: [l: 2    , c: 0    ]
 
 Named Global
-B: [l: 2    , c: 3    ]  *evil-owl-test*
-P: [l: 4    , c: 0    ]  *evil-owl-test*
+ B: [l: 2    , c: 3    ]  *evil-owl-test*
+ P: [l: 4    , c: 0    ]  *evil-owl-test*
 
 Numbered
-0: [l: 1    , c: 2    ]
+ 0: [l: 1    , c: 2    ]
 
 Special
-^: [l: 5    , c: 0    ]
-{: [l: 1    , c: 0    ]
-}: [l: 4    , c: 0    ]
+ ^: [l: 5    , c: 0    ]
+ {: [l: 1    , c: 0    ]
+ }: [l: 4    , c: 0    ]
 "))
           "as[d]f\njkl;\nemacs\n\nline\nowl\n")
         "asdf\nfdsa\nelisp\n[]"))))

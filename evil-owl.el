@@ -42,7 +42,7 @@
 
 (defgroup evil-owl nil
   "Register and mark preview popups."
-  :prefix 'evil-owl
+  :prefix "evil-owl-"
   :group 'evil)
 
 ;; * User Options
@@ -79,14 +79,14 @@ this variable."
 An empty string means to not show a header."
   :type 'string)
 
-(defcustom evil-owl-register-format "%r: %s"
+(defcustom evil-owl-register-format " %r: %s"
   "Format for register entries.
 Possible format specifiers are:
 - %r: the register
 - %s: the register's contents"
   :type 'string)
 
-(defcustom evil-owl-local-mark-format "%m: [l: %-5l, c: %-5c]"
+(defcustom evil-owl-local-mark-format " %m: [l: %-5l, c: %-5c]"
   "Format for local mark entries.
 Possible format specifiers are:
 - %m: the mark
@@ -95,7 +95,7 @@ Possible format specifiers are:
 - %b: the mark's buffer"
   :type 'string)
 
-(defcustom evil-owl-global-mark-format "%m: [l: %-5l, c: %-5c] %b"
+(defcustom evil-owl-global-mark-format " %m: [l: %-5l, c: %-5c] %b"
   "Format for global mark entries.
 Possible format specifiers are:
 - %m: the mark
@@ -318,30 +318,29 @@ the keys of such commands will not be read."
             (user-error "%s is undefined" (key-description keys)))))))))
 
 ;; * Minor Mode
-(defun evil-owl--call-with-popup (fn display-fn)
-  "Call FN with a posframe preview showing DISPLAY-FN's result."
-  (apply
-   #'funcall-interactively
-   fn
-   (unwind-protect
-       (progn
-         (evil-owl--idle-show-popup (funcall display-fn))
-         (cl-letf (((symbol-function 'evil-read-key) #'evil-owl--read-register-or-mark)
-                   ((symbol-function 'read-char) #'evil-owl--read-register-or-mark))
-           (advice-eval-interactive-spec (cl-second (interactive-form fn)))))
-     (evil-owl--hide-popup))))
+(defun evil-owl--eval-interactive-spec (fn display-fn)
+  "Evaluate FN's interactive spec with a posframe preview.
+The posframe will show DISPLAY-FN's output."
+  (unwind-protect
+      (progn
+        (evil-owl--idle-show-popup (funcall display-fn))
+        (cl-letf (((symbol-function 'evil-read-key) #'evil-owl--read-register-or-mark)
+                  ((symbol-function 'read-char) #'evil-owl--read-register-or-mark))
+          (advice-eval-interactive-spec (cl-second (interactive-form fn)))))
+    (evil-owl--hide-popup)))
 
 (cl-defmacro evil-owl--define-wrapper (name &key wrap display)
   "Define NAME as a wrapper around WRAP.
 DISPLAY is a function that outputs a string to show in the preview
 posframe."
   (declare (indent defun))
-  `(evil-define-command ,name ()
-     ,(format "Wrapper function for `%s' that shows a posframe preview." wrap)
-     ,@(evil-get-command-properties wrap)
-     (interactive)
-     (setq this-command #',wrap)
-     (evil-owl--call-with-popup #',wrap #',display)))
+  (let ((args (gensym "args")))
+    `(evil-define-command ,name (&rest ,args)
+       ,(format "Wrapper function for `%s' that shows a posframe preview." wrap)
+       ,@(evil-get-command-properties wrap)
+       (interactive (evil-owl--eval-interactive-spec #',wrap #',display))
+       (setq this-command #',wrap)
+       (apply #'funcall-interactively #',wrap ,args))))
 
 (evil-owl--define-wrapper evil-owl-use-register
   :wrap evil-use-register
