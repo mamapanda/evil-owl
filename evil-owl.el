@@ -239,7 +239,7 @@ MARK points nowhere."
 
 (defun evil-owl--show-popup (string)
   "Show STRING in a posframe."
-  (when (and (posframe-workable-p) (not (minibufferp)))
+  (when (posframe-workable-p)
     (apply #'posframe-show
            evil-owl--buffer
            :string string
@@ -338,7 +338,12 @@ posframe."
     `(evil-define-command ,name (&rest ,args)
        ,(format "Wrapper function for `%s' that shows a posframe preview." wrap)
        ,@(evil-get-command-properties wrap)
-       (interactive (evil-owl--eval-interactive-spec #',wrap #',display))
+       (interactive
+        (if (minibufferp)
+            ;; `posframe-show' errors when we're in the minibuffer.
+            ;; I've also observed this with ivy-posframe.
+            (advice-eval-interactive-spec (cl-second (interactive-form #',wrap)))
+          (evil-owl--eval-interactive-spec #',wrap #',display)))
        (setq this-command #',wrap)
        (apply #'funcall-interactively #',wrap ,args))))
 
