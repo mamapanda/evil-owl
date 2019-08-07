@@ -1,0 +1,99 @@
+#+TITLE: Evil Owl
+#+AUTHOR: Daniel Phan
+
+~evil-owl~ allows you to view your registers and marks in a posframe
+before using them.
+
+[[./img/registers.png]]
+
+* Basic Setup
+  This package isn't available on MELPA at the moment, so you'll need
+  to install it some other way.  With that done, here's a basic setup
+  with ~use-package~.
+
+  #+BEGIN_SRC emacs-lisp
+    (use-package evil-owl
+      :config
+      (setq evil-owl-extra-posframe-args '(:width 50 :height 20)
+            evil-owl-register-char-limit 50)
+      (evil-owl-mode))
+  #+END_SRC
+
+  Press ~q~, ~@~, ~​"​~, ~C-r~, ~m~, ~​'​~, or ~`~ to view the posframe,
+  press ~C-f~ or ~C-b~ to scroll it, and input a register or mark to
+  make the posframe disappear.
+
+* Customization
+** Faces
+   ~evil-owl~ uses the following faces:
+   - ~evil-owl-group-name~ for register/mark group names
+   - ~evil-owl-entry-name~ for register/mark characters in each entry
+
+   You can edit them with ~custom-set-faces~:
+
+   #+BEGIN_SRC emacs-lisp
+     (custom-set-faces
+      '(evil-owl-group-name ((t (:inherit font-lock-function-name-face))))
+      '(evil-owl-entry-name ((t (:inherit font-lock-type-face)))))
+   #+END_SRC
+
+** Variables
+   The following options control formatting:
+   - ~evil-owl-header-format~ for group headers
+   - ~evil-owl-register-format~ for register entries
+   - ~evil-owl-local-mark-format~ for local mark entries
+   - ~evil-owl-global-mark-format~ for global mark entries
+   - ~evil-owl-separator~ for separators between groups
+
+   Here are their default values:
+
+   #+BEGIN_SRC emacs-lisp
+     (setq evil-owl-header-format      "%s"
+           evil-owl-register-format    " %r: %s"
+           evil-owl-local-mark-format  " %m: [l: %-5l, c: %-5c]"
+           evil-owl-global-mark-format " %m: [l: %-5l, c: %-5c] %b"
+           evil-owl-separator          "\n")
+   #+END_SRC
+
+   ~evil-owl-register-groups~ and ~evil-owl-mark-groups~ determine
+   register and mark groups, respectively, for display.
+
+   #+BEGIN_SRC emacs-lisp
+     (setq evil-owl-register-groups
+           `(("Named"     . ,(cl-loop for c from ?a to ?z collect c))
+             ("Numbered"  . ,(cl-loop for c from ?0 to ?9 collect c))
+             ("Special"   . (?\" ?* ?+ ?-))
+             ("Read-only" . (?% ?# ?/ ?: ?.))))
+
+     (setq evil-owl-mark-groups
+           `(("Named Local"  . ,(cl-loop for c from ?a to ?z collect c))
+             ("Named Global" . ,(cl-loop for c from ?A to ?Z collect c))
+             ("Numbered"     . ,(cl-loop for c from ?0 to ?9 collect c))
+             ("Special"      . (?\[ ?\] ?< ?> ?^ ?\( ?\) ?{ ?}))))
+   #+END_SRC
+
+   ~evil-owl-idle-delay~ dictates, in seconds, how long to wait before
+   showing the posframe.
+
+   #+BEGIN_SRC emacs-lisp
+     (setq evil-owl-idle-delay 1.0)
+   #+END_SRC
+
+   ~evil-owl-extra-posframe-args~ are extra arguments to pass to
+   ~posframe-show~.
+
+   #+BEGIN_SRC emacs-lisp
+     (setq evil-owl-extra-posframe-args '(:width 50 :height 20))
+   #+END_SRC
+
+   ~evil-owl-register-char-limit~ decides the maximum number of
+   characters to consider in a register containing a string. If
+   registers store a lot of text, processing them can be slow, so it's
+   recommended to set this variable to a low value.
+
+   #+BEGIN_SRC emacs-lisp
+     (setq evil-owl-register-char-limit 100)
+   #+END_SRC
+
+* Inspirations
+  - [[https://github.com/junegunn/vim-peekaboo][vim-peekaboo]] by Junegunn Choi
