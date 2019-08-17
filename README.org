@@ -1,15 +1,18 @@
 #+TITLE: Evil Owl
 #+AUTHOR: Daniel Phan
 
+[[https://melpa.org/#/evil-owl][file:https://melpa.org/packages/evil-owl-badge.svg]]
+[[https://travis-ci.com/mamapanda/evil-owl][file:https://travis-ci.com/mamapanda/evil-owl.svg?branch=master]]
+
 ~evil-owl~ allows you to view your registers and marks in a posframe
 before using them.
 
 [[./img/registers.png]]
 
 * Basic Setup
-  This package isn't available on MELPA at the moment, so you'll need
-  to install it some other way.  With that done, here's a basic setup
-  with ~use-package~.
+  This package can be installed from MELPA with ~M-x package-install
+  [RET] evil-owl [RET]~.  Here's a basic configuration with
+  ~use-package~.
 
   #+BEGIN_SRC emacs-lisp
     (use-package evil-owl
