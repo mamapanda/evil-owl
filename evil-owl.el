@@ -1,10 +1,10 @@
-;;; evil-owl.el --- Preview evil's registers and marks in a posframe -*- lexical-binding: t -*-
+;;; evil-owl.el --- Preview evil registers and marks before using them -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2019 Daniel Phan
 
 ;; Author: Daniel Phan <daniel.phan36@gmail.com>
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "26.1") (evil "1.2.13") (posframe "0.5.0"))
+;; Package-Requires: ((emacs "25.1") (evil "1.2.13"))
 ;; Homepage: https://github.com/mamapanda/evil-owl
 ;; Keywords: emulations, evil, visual
 
@@ -27,8 +27,8 @@
 
 ;;; Commentary:
 ;;
-;; evil-owl provides a posframe preview popup for evil's mark and
-;; register commands.  To enable the popup, turn on `evil-owl-mode'.
+;; evil-owl provides a preview popup for evil's mark and register
+;; commands.  To enable the popup, turn on `evil-owl-mode'.
 
 ;;; Code:
 
@@ -36,9 +36,13 @@
 (require 'cl-lib)
 (require 'evil)
 (require 'format-spec)
-(require 'posframe)
 (eval-when-compile
   (require 'subr-x))
+
+(declare-function posframe-workable-p "ext:posframe.el")
+(declare-function posframe-show "ext:posframe.el")
+(declare-function posframe-funcall "ext:posframe.el")
+(declare-function posframe-delete "ext:posframe.el")
 
 (defgroup evil-owl nil
   "Register and mark preview popups."
@@ -108,6 +112,11 @@ Possible format specifiers are:
   "The separator string to place between sections."
   :type 'string)
 
+(defcustom evil-owl-display-method 'window
+  "The method to use to display the preview.
+The value may be either 'window or 'posframe."
+  :type '(choice (const window) (const posframe)))
+
 (defcustom evil-owl-extra-posframe-args nil
   "Extra arguments to pass to `posframe-show'."
   :type 'list)
@@ -143,7 +152,7 @@ Possible format specifiers are:
      "\n")))
 
 (defun evil-owl--display-string (groups entry-string-fn)
-  "Return the display string to put in the posframe buffer.
+  "Return the display string to put in the preview buffer.
 GROUPS is an alist of group names to group members.
 ENTRY-STRING-FN is a function that takes one parameter, the entry to
 show, and outputs an entry string (newline included)."
@@ -180,7 +189,7 @@ The result is nil if REG is empty."
       "")))
 
 (defun evil-owl--register-display-string ()
-  "Compute the posframe display string for registers."
+  "Compute the preview display string for registers."
   (evil-owl--display-string evil-owl-register-groups
                             #'evil-owl--register-entry-string))
 
@@ -194,14 +203,14 @@ The result is nil if REG is empty."
   "Get the position stored in MARK.
 The result is a list (line-number column-number buffer), or nil if
 MARK points nowhere."
-  (when-let* ((pos (condition-case nil
-                       (evil-get-marker mark)
-                     ;; Some marks error if their use conditions
-                     ;; haven't been met (e.g. '> assumes that there's
-                     ;; a previous/current visual selection)
-                     (error nil)))
-              (buffer (cond ((numberp pos) (current-buffer))
-                            ((markerp pos) (marker-buffer pos)))))
+  (when-let ((pos (condition-case nil
+                      (evil-get-marker mark)
+                    ;; Some marks error if their use conditions
+                    ;; haven't been met (e.g. '> assumes that there's
+                    ;; a previous/current visual selection)
+                    (error nil)))
+             (buffer (cond ((numberp pos) (current-buffer))
+                           ((markerp pos) (marker-buffer pos)))))
     (with-current-buffer buffer
       (let ((line (line-number-at-pos pos))
             (column (save-excursion
@@ -225,21 +234,49 @@ MARK points nowhere."
     ""))
 
 (defun evil-owl--mark-display-string ()
-  "Compute the posframe display string for markers."
+  "Compute the preview display string for markers."
   (evil-owl--display-string evil-owl-mark-groups
                             #'evil-owl--mark-entry-string))
 
-;; * Posframe
+;; * Preview
 ;; ** Show / Hide
-(defconst evil-owl--buffer " *evil-owl*"
+(defconst evil-owl--buffer "*evil-owl*"
   "The buffer name for the popup.")
 
 (defvar evil-owl--timer nil
   "The timer for the popup.")
 
-(defun evil-owl--show-popup (string)
-  "Show STRING in a posframe."
-  (when (posframe-workable-p)
+(defvar evil-owl--saved-window-config nil
+  "The window configuration before triggering evil-owl.
+This is used to restore the window configuration when
+`evil-owl-display-method' is 'window.")
+
+(defun evil-owl--show-window (string)
+  "Show STRING in a preview window."
+  (setq evil-owl--saved-window-config (current-window-configuration))
+  (let* ((buffer (get-buffer-create evil-owl--buffer))
+         (window (display-buffer buffer t)))
+    (with-selected-window window
+      (setq cursor-in-non-selected-windows nil)
+      (setq-local truncate-lines t)
+      (erase-buffer)
+      (insert string)
+      (goto-char (point-min)))))
+
+(defun evil-owl--hide-window ()
+  "Hide the preview window."
+  (when evil-owl--saved-window-config
+    (set-window-configuration evil-owl--saved-window-config)
+    (setq evil-owl--saved-window-config nil))
+  (when-let ((buffer (get-buffer evil-owl--buffer)))
+    (kill-buffer buffer)))
+
+(defun evil-owl--show-posframe (string)
+  "Show STRING in a preview posframe."
+  (require 'posframe)
+  ;; `posframe-show' errors when we're in the minibuffer.
+  ;; I've also observed this with other packages.
+  (when (and (posframe-workable-p) (not (minibufferp)))
     (apply #'posframe-show
            evil-owl--buffer
            :string string
@@ -248,17 +285,30 @@ MARK points nowhere."
     (posframe-funcall evil-owl--buffer
                       (lambda () (setq-local truncate-lines t)))))
 
+(defun evil-owl--hide-posframe ()
+  "Hide the preview posframe."
+  (posframe-delete evil-owl--buffer))
+
+(defun evil-owl--show-popup (string)
+  "Show STRING in a preview popup.
+The popup type is determined by `evil-owl-display-method'."
+  (cl-case evil-owl-display-method
+    (window (evil-owl--show-window string))
+    (posframe (evil-owl--show-posframe string))))
+
 (defun evil-owl--idle-show-popup (string)
   "Show STRING in a posframe after `evil-owl-idle-delay' seconds."
   (setq evil-owl--timer
         (run-at-time evil-owl-idle-delay nil #'evil-owl--show-popup string)))
 
 (defun evil-owl--hide-popup ()
-  "Hide the posframe."
+  "Hide the preview popup."
   (when evil-owl--timer
     (cancel-timer evil-owl--timer)
     (setq evil-owl--timer nil))
-  (posframe-delete evil-owl--buffer))
+  (cl-case evil-owl-display-method
+    (window (evil-owl--hide-window))
+    (posframe (evil-owl--hide-posframe))))
 
 ;; ** Keybindings
 (defvar evil-owl-popup-map
@@ -270,18 +320,28 @@ MARK points nowhere."
     map)
   "Keymap applied when the popup is active.")
 
+(defun evil-owl--funcall (fn &rest args)
+  "Call FN with ARGS in the preview buffer."
+  (cl-case evil-owl-display-method
+    (window
+     (when-let ((window (get-buffer-window evil-owl--buffer)))
+       (with-selected-window window
+         (apply fn args))))
+    (posframe
+     (posframe-funcall evil-owl--buffer fn args))))
+
 (defun evil-owl-scroll-popup-up ()
   "Scroll the popup up one page."
   (interactive)
   (condition-case nil
-      (posframe-funcall evil-owl--buffer #'scroll-down)
+      (evil-owl--funcall #'scroll-down)
     (beginning-of-buffer nil)))
 
 (defun evil-owl-scroll-popup-down ()
   "Scroll the popup down one page."
   (interactive)
   (condition-case nil
-      (posframe-funcall evil-owl--buffer #'scroll-up)
+      (evil-owl--funcall #'scroll-up)
     (end-of-buffer nil)))
 
 (defmacro evil-owl--with-popup-map (&rest body)
@@ -319,8 +379,8 @@ the keys of such commands will not be read."
 
 ;; * Minor Mode
 (defun evil-owl--eval-interactive-spec (fn display-fn)
-  "Evaluate FN's interactive spec with a posframe preview.
-The posframe will show DISPLAY-FN's output."
+  "Evaluate FN's interactive spec with a preview popup.
+The popup will show DISPLAY-FN's output."
   (unwind-protect
       (progn
         (evil-owl--idle-show-popup (funcall display-fn))
@@ -332,18 +392,13 @@ The posframe will show DISPLAY-FN's output."
 (cl-defmacro evil-owl--define-wrapper (name &key wrap display)
   "Define NAME as a wrapper around WRAP.
 DISPLAY is a function that outputs a string to show in the preview
-posframe."
+popup."
   (declare (indent defun))
   (let ((args (gensym "args")))
     `(evil-define-command ,name (&rest ,args)
-       ,(format "Wrapper function for `%s' that shows a posframe preview." wrap)
+       ,(format "Wrapper function for `%s' that shows a preview popup." wrap)
        ,@(evil-get-command-properties wrap)
-       (interactive
-        (if (minibufferp)
-            ;; `posframe-show' errors when we're in the minibuffer.
-            ;; I've also observed this with ivy-posframe.
-            (advice-eval-interactive-spec (cl-second (interactive-form #',wrap)))
-          (evil-owl--eval-interactive-spec #',wrap #',display)))
+       (interactive (evil-owl--eval-interactive-spec #',wrap #',display))
        (setq this-command #',wrap)
        (apply #'funcall-interactively #',wrap ,args))))
 

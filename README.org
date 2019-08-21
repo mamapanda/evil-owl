@@ -4,27 +4,41 @@
 [[https://melpa.org/#/evil-owl][file:https://melpa.org/packages/evil-owl-badge.svg]]
 [[https://travis-ci.com/mamapanda/evil-owl][file:https://travis-ci.com/mamapanda/evil-owl.svg?branch=master]]
 
-~evil-owl~ allows you to view your registers and marks in a posframe
-before using them.
+~evil-owl~ allows you to view registers and marks before using them.
 
 [[./img/registers.png]]
 
 * Basic Setup
   This package can be installed from MELPA with ~M-x package-install
   [RET] evil-owl [RET]~.  Here's a basic configuration with
-  ~use-package~.
+  ~use-package~:
 
   #+BEGIN_SRC emacs-lisp
     (use-package evil-owl
       :config
-      (setq evil-owl-extra-posframe-args '(:width 50 :height 20)
+      (setq evil-owl-register-char-limit 50)
+      (add-to-list 'display-buffer-alist
+                   '("*evil-owl*"
+                     (display-buffer-in-side-window)
+                     (side . bottom)
+                     (window-height . 0.3)))
+      (evil-owl-mode))
+  #+END_SRC
+
+  Alternatively, with posframe:
+
+  #+BEGIN_SRC emacs-lisp
+    (use-package evil-owl
+      :config
+      (setq evil-owl-display-method 'posframe
+            evil-owl-extra-posframe-args '(:width 50 :height 20)
             evil-owl-register-char-limit 50)
       (evil-owl-mode))
   #+END_SRC
 
-  Press ~q~, ~@~, ~​"​~, ~C-r~, ~m~, ~​'​~, or ~`~ to view the posframe,
+  Press ~q~, ~@~, ~​"​~, ~C-r~, ~m~, ~​'​~, or ~`~ to view the popup,
   press ~C-f~ or ~C-b~ to scroll it, and input a register or mark to
-  make the posframe disappear.
+  make the popup disappear.
 
 * Customization
 ** Faces
@@ -75,17 +89,35 @@ before using them.
              ("Special"      . (?\[ ?\] ?< ?> ?^ ?\( ?\) ?{ ?}))))
    #+END_SRC
 
+   ~evil-owl-display-method~ may be one of ~'window~ or ~'posframe~
+   and decides whether to pop up a window or posframe.  If the value
+   is ~'posframe~, the ~posframe~ package is expected to be installed.
+
+   #+BEGIN_SRC emacs-lisp
+     (setq evil-owl-display-method 'window)
+   #+END_SRC
+
    ~evil-owl-idle-delay~ dictates, in seconds, how long to wait before
-   showing the posframe.
+   showing the window/posframe.
 
    #+BEGIN_SRC emacs-lisp
      (setq evil-owl-idle-delay 1.0)
    #+END_SRC
 
-   ~evil-owl-extra-posframe-args~ are extra arguments to pass to
+   To customize the popup window, use ~display-buffer-alist~ with the
+   buffer name ~*evil-owl*~.  For the posframe,
+   ~evil-owl-extra-posframe-args~ holds extra arguments to pass to
    ~posframe-show~.
 
    #+BEGIN_SRC emacs-lisp
+     ;; if `evil-owl-display-method' is 'window
+     (add-to-list 'display-buffer-alist
+                  '("*evil-owl*"
+                    (display-buffer-in-side-window)
+                    (side . bottom)
+                    (window-height . 0.3)))
+
+     ;; if `evil-owl-display-method' is 'posframe
      (setq evil-owl-extra-posframe-args '(:width 50 :height 20))
    #+END_SRC
 
