@@ -89,9 +89,9 @@
              ("Special"      . (?\[ ?\] ?< ?> ?^ ?\( ?\) ?{ ?}))))
    #+END_SRC
 
-   ~evil-owl-display-method~ may be one of ~'window~ or ~'posframe~
+   ~evil-owl-display-method~ may be one of ~​'​window~ or ~​'​posframe~
    and decides whether to pop up a window or posframe.  If the value
-   is ~'posframe~, the ~posframe~ package is expected to be installed.
+   is ~​'​posframe~, the ~posframe~ package is expected to be installed.
 
    #+BEGIN_SRC emacs-lisp
      (setq evil-owl-display-method 'window)
