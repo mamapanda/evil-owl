@@ -16,7 +16,7 @@
   #+BEGIN_SRC emacs-lisp
     (use-package evil-owl
       :config
-      (setq evil-owl-register-char-limit 50)
+      (setq evil-owl-register-char-limit 500)
       (add-to-list 'display-buffer-alist
                    '("*evil-owl*"
                      (display-buffer-in-side-window)
