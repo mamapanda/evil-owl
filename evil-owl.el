@@ -347,7 +347,7 @@ The popup type is determined by `evil-owl-display-method'."
 (defmacro evil-owl--with-popup-map (&rest body)
   "Execute BODY with `evil-owl-popup-map' as the sole keymap."
   (declare (indent 0))
-  (let ((current-global-map (gensym "current-global-map")))
+  (let ((current-global-map (cl-gensym "current-global-map")))
     `(let ((overriding-terminal-local-map nil)
            (overriding-local-map evil-owl-popup-map)
            (,current-global-map (current-global-map)))
@@ -394,7 +394,7 @@ The popup will show DISPLAY-FN's output."
 DISPLAY is a function that outputs a string to show in the preview
 popup."
   (declare (indent defun))
-  (let ((args (gensym "args")))
+  (let ((args (cl-gensym "args")))
     `(evil-define-command ,name (&rest ,args)
        ,(format "Wrapper function for `%s' that shows a preview popup." wrap)
        ,@(evil-get-command-properties wrap)
