@@ -16,7 +16,7 @@
   #+BEGIN_SRC emacs-lisp
     (use-package evil-owl
       :config
-      (setq evil-owl-register-char-limit 500)
+      (setq evil-owl-max-string-length 500)
       (add-to-list 'display-buffer-alist
                    '("*evil-owl*"
                      (display-buffer-in-side-window)
@@ -32,7 +32,7 @@
       :config
       (setq evil-owl-display-method 'posframe
             evil-owl-extra-posframe-args '(:width 50 :height 20)
-            evil-owl-register-char-limit 50)
+            evil-owl-max-string-length 50)
       (evil-owl-mode))
   #+END_SRC
 
@@ -130,13 +130,13 @@
      (setq evil-owl-extra-posframe-args '(:width 50 :height 20))
    #+END_SRC
 
-   ~evil-owl-register-char-limit~ decides the maximum number of
+   ~evil-owl-max-string-length~ decides the maximum number of
    characters to consider in a register containing a string. If
    registers store a lot of text, processing them can be slow, so it's
    recommended to set this variable to a low value.
 
    #+BEGIN_SRC emacs-lisp
-     (setq evil-owl-register-char-limit 100)
+     (setq evil-owl-max-string-length 100)
    #+END_SRC
 
 * Inspirations
