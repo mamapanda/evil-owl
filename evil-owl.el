@@ -205,8 +205,8 @@ The result is nil if REG is empty."
 
 (defun evil-owl--get-mark (mark)
   "Get the position stored in MARK.
-The result is a list (line-number column-number buffer), or nil if
-MARK points nowhere."
+The result is a list (line-number column-number buffer context-line),
+or nil if MARK points nowhere."
   (when-let ((pos (condition-case nil
                       (evil-get-marker mark)
                     ;; Some marks error if their use conditions

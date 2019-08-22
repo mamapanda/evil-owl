@@ -131,9 +131,9 @@
    #+END_SRC
 
    ~evil-owl-max-string-length~ decides the maximum number of
-   characters to consider in a register containing a string. If
-   registers store a lot of text, processing them can be slow, so it's
-   recommended to set this variable to a low value.
+   characters to consider in certain string values. If strings are too
+   long, processing them can be slow, so it's recommended to set this
+   variable to a low value.
 
    #+BEGIN_SRC emacs-lisp
      (setq evil-owl-max-string-length 100)
