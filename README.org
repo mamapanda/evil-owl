@@ -72,6 +72,15 @@
            evil-owl-separator          "\n")
    #+END_SRC
 
+   For ~evil-owl-local-mark-format~ and ~evil-owl-global-mark-format~,
+   a preview of the line corresponding to the stored mark can be
+   viewed using something like the following:
+
+   #+BEGIN_SRC emacs-lisp
+     (setq evil-owl-local-mark-format " %m: [l: %-5l, c: %-5c]\n    %s")
+     (setq evil-owl-global-mark-format " %m: [l: %-5l, c: %-5c] %b\n    %s")
+   #+END_SRC
+
    ~evil-owl-register-groups~ and ~evil-owl-mark-groups~ determine
    register and mark groups, respectively, for display.
 
