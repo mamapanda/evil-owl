@@ -155,7 +155,43 @@ Special
  }: [l: 4    , c: 0    ]
 "))
           "as[d]f\njkl;\nemacs\n\nline\nowl\n")
-        "asdf\nfdsa\nelisp\n[]"))))
+        "asdf\nfdsa\nelisp\n[]")))
+  (ert-info ("Display context lines")
+    (evil-owl--with-test-env
+     (let ((evil-owl-local-mark-format " %m: [l: %-5l, c: %-5c]\n    %s")
+           (evil-owl-global-mark-format " %m: [l: %-5l, c: %-5c] %b\n    %s"))
+       (evil-test-buffer
+        "asdf\nfds[a]\nelisp\n"
+        (rename-buffer " *evil-owl-test*")
+        ("mB" "G" "mP")
+        (evil-test-buffer
+         "asdf\n[j]kl;\nline\nowl\n"
+         ("ma" "j" "iemacs" [return] [return] [escape] "gg2l" "m0")
+         (should (equal (evil-owl--mark-display-string)
+                        "Named Local
+ a: [l: 2    , c: 0    ]
+    jkl;
+
+Named Global
+ B: [l: 2    , c: 3    ]  *evil-owl-test*
+    fdsa
+ P: [l: 4    , c: 0    ]  *evil-owl-test*
+    
+
+Numbered
+ 0: [l: 1    , c: 2    ]
+    asdf
+
+Special
+ ^: [l: 5    , c: 0    ]
+    line
+ {: [l: 1    , c: 0    ]
+    asdf
+ }: [l: 4    , c: 0    ]
+    
+"))
+         "as[d]f\njkl;\nemacs\n\nline\nowl\n")
+        "asdf\nfdsa\nelisp\n[]")))))
 
 (ert-deftest evil-owl-test-register-commands ()
   "Check that evil-owl's register commands function normally."
