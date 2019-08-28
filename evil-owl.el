@@ -299,6 +299,7 @@ This is used to restore the window configuration when
 
 (defun evil-owl--hide-posframe ()
   "Hide the preview posframe."
+  (require 'posframe)
   (posframe-delete evil-owl--buffer))
 
 (defun evil-owl--show-popup (string)
@@ -309,7 +310,7 @@ The popup type is determined by `evil-owl-display-method'."
     (posframe (evil-owl--show-posframe string))))
 
 (defun evil-owl--idle-show-popup (string)
-  "Show STRING in a posframe after `evil-owl-idle-delay' seconds."
+  "Show STRING in a popup after `evil-owl-idle-delay' seconds."
   (setq evil-owl--timer
         (run-at-time evil-owl-idle-delay nil #'evil-owl--show-popup string)))
 
