@@ -366,7 +366,15 @@ The popup type is determined by `evil-owl-display-method'."
            (,current-global-map (current-global-map)))
        (unwind-protect
            (progn
-             (use-global-map (make-sparse-keymap))
+             (use-global-map
+              (let ((map (make-sparse-keymap)))
+                (define-key map [menu-bar]
+                  (lookup-key global-map [menu-bar]))
+                (define-key map [tool-bar]
+                  (lookup-key global-map [tool-bar]))
+                (define-key map [tab-bar]
+                  (lookup-key global-map [tab-bar]))
+                map))
              ,@body)
          (use-global-map ,current-global-map)))))
 
