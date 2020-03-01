@@ -416,12 +416,12 @@ DISPLAY is a function that outputs a string to show in the preview
 popup."
   (declare (indent defun))
   (let ((args (cl-gensym "args")))
-    `(evil-define-command ,name (&rest ,args)
+    `(evil-define-command ,name (,args)
        ,(format "Wrapper function for `%s' that shows a preview popup." wrap)
        ,@(evil-get-command-properties wrap)
        (interactive (evil-owl--eval-interactive-spec #',wrap #',display))
        (setq this-command #',wrap)
-       (apply #'funcall-interactively #',wrap ,args))))
+       (apply #'funcall-interactively #',wrap ,args nil))))
 
 (evil-owl--define-wrapper evil-owl-use-register
   :wrap evil-use-register
