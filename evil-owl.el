@@ -146,13 +146,13 @@ The value may be either 'window or 'posframe."
 
 ;; * Display Strings
 ;; ** Common
-(defun evil-owl--header-string (group-name)
-  "Return the header string for a group, where GROUP-NAME is the group's name."
+(defun evil-owl--header-string (name-of-group)
+  "Return the header string for a group, where NAME-OF-GROUP is the group name."
   (if (string-empty-p evil-owl-header-format)
       ""
     (concat
      (format evil-owl-header-format
-             (propertize group-name 'face 'evil-owl-group-name))
+             (propertize name-of-group 'face 'evil-owl-group-name))
      "\n")))
 
 (defun evil-owl--display-string (groups entry-string-fn)
