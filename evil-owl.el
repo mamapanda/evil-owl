@@ -127,11 +127,11 @@ The value may be either 'window or 'posframe."
   "The idle delay, in seconds, before the popup appears."
   :type 'float)
 
+(define-obsolete-variable-alias 'evil-owl-register-char-limit 'evil-owl-max-string-length "0.0.1")
+
 (defcustom evil-owl-max-string-length nil
   "Maximum number of characters to consider in a string register or context line."
   :type 'integer)
-
-(define-obsolete-variable-alias 'evil-owl-register-char-limit 'evil-owl-max-string-length "0.0.1")
 
 (defcustom evil-owl-lighter " evil-owl"
   "Lighter for evil-owl."
