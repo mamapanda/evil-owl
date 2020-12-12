@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    paths:
+      - '**.el'
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - '**.el'
+      - ".github/workflows/test.yml"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        emacs_version: [25.3, 26.3, 27.1]
+    steps:
+      - uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs_version }}
+
+      - uses: actions/checkout@v2
+
+      - name: Setup
+        run: |
+          make update
+          make clean
+
+      - name: Compile
+        run: make compile
+
+      - name: Lint
+        run: |
+          make package-lint
+          make checkdoc
+
+      - name: Test
+        run: make test
