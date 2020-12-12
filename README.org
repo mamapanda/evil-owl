@@ -2,7 +2,7 @@
 #+AUTHOR: Daniel Phan
 
 [[https://melpa.org/#/evil-owl][file:https://melpa.org/packages/evil-owl-badge.svg]]
-[[https://travis-ci.com/mamapanda/evil-owl][file:https://travis-ci.com/mamapanda/evil-owl.svg?branch=master]]
+[[https://github.com/mamapanda/evil-owl/actions?query=workflow%3ACI][file:https://github.com/mamapanda/evil-owl/workflows/CI/badge.svg]]
 
 ~evil-owl~ allows you to view registers and marks before using them.
 
