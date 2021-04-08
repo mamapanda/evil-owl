@@ -55,7 +55,7 @@
   `(("Named"     . ,(cl-loop for c from ?a to ?z collect c))
     ("Numbered"  . ,(cl-loop for c from ?0 to ?9 collect c))
     ("Special"   . (?\" ?* ?+ ?-))
-    ("Read-only" . (?% ?# ?/ ?: ?.)))
+    ("Read-only" . (?% ?# ?/ ?: ?= ?.)))
   "An alist of register group names to registers.
 Groups and registers will be displayed in the same order they appear
 in this variable."
@@ -172,7 +172,9 @@ show, and outputs an entry string (newline included)."
 (defun evil-owl--get-register (reg)
   "Get the contents of REG as a string.
 The result is nil if REG is empty."
-  (when-let ((contents (evil-get-register reg t)))
+  (when-let ((contents (if (= ?= reg)
+                           evil-last-=-register-input
+                         (evil-get-register reg t))))
     (cond
      ((stringp contents)
       (when (and evil-owl-max-string-length
