@@ -173,8 +173,9 @@ show, and outputs an entry string (newline included)."
   "Get the contents of REG as a string.
 The result is nil if REG is empty."
   (when-let ((contents (cond
-                        ((and (= ?= reg) (boundp 'evil-last-=-register-input))
-                         evil-last-=-register-input)
+                        ((= ?= reg)
+                         (and (boundp 'evil-last-=-register-input)
+                              evil-last-=-register-input))
                         (t (evil-get-register reg t)))))
     (cond
      ((stringp contents)
