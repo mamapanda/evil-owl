@@ -172,9 +172,10 @@ show, and outputs an entry string (newline included)."
 (defun evil-owl--get-register (reg)
   "Get the contents of REG as a string.
 The result is nil if REG is empty."
-  (when-let ((contents (if (= ?= reg)
-                           evil-last-=-register-input
-                         (evil-get-register reg t))))
+  (when-let ((contents (cond
+                        ((and (= ?= reg) (boundp 'evil-last-=-register-input))
+                         evil-last-=-register-input)
+                        (t (evil-get-register reg t)))))
     (cond
      ((stringp contents)
       (when (and evil-owl-max-string-length
